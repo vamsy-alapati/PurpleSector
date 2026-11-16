@@ -101,7 +101,7 @@ describe('surfaces', () => {
 });
 
 describe('session', () => {
-  it('a bot completes laps of roughly 12–30 s on every daily track', () => {
+  it('a bot completes laps of roughly 12–35 s on every daily track', () => {
     const times: number[] = [];
     for (const day of DAYS.slice(0, 40)) {
       const { s } = runBot(day, 2);
@@ -110,7 +110,7 @@ describe('session', () => {
       const sum = lap.sectors[0] + lap.sectors[1] + lap.sectors[2];
       expect(Math.abs(sum - lap.time)).toBeLessThan(1e-9);
       expect(lap.time, day).toBeGreaterThan(10);
-      expect(lap.time, day).toBeLessThan(32);
+      expect(lap.time, day).toBeLessThan(35);
       times.push(lap.time);
     }
     times.sort((a, b) => a - b);

@@ -3,6 +3,7 @@ import { generateTrackDef, utcDateKey } from '@purple-sector/sim';
 import { Game, INITIAL_HUD, type HudState } from './game/Game';
 import { Hud } from './ui/Hud';
 import { PauseMenu, StartMenu } from './ui/Menus';
+import { ResultsPopup } from './ui/Results';
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -45,6 +46,14 @@ export default function App() {
       )}
       {hud.phase === 'paused' && (
         <PauseMenu onResume={() => gameRef.current?.togglePause()} onRestart={() => gameRef.current?.restart()} />
+      )}
+      {hud.phase === 'finished' && hud.result && (
+        <ResultsPopup
+          result={hud.result}
+          trackName={hud.trackName}
+          dateLabel={dateLabel}
+          onRetry={() => gameRef.current?.restart()}
+        />
       )}
     </div>
   );

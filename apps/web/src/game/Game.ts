@@ -3,7 +3,6 @@ import {
   carSpeed,
   DT,
   INPUT,
-  RUNOFF,
   Session,
   wrapAngle,
   type CarState,
@@ -18,7 +17,7 @@ import { Effects } from './effects';
 import { GhostPlayer, GhostRecorder } from './ghost';
 import { Keyboard } from './input';
 import { buildTrackGfx, drawFrame, type TrackGfx, type View } from './render';
-import { buildScenery, type Scenery } from './scenery';
+import { buildScenery, frameMargin, type Scenery } from './scenery';
 import {
   loadGhost,
   loadRecords,
@@ -31,7 +30,19 @@ import {
   type ViewMode,
 } from './storage';
 
-export type Phase = 'ready' | 'countdown' | 'running' | 'paused';
+export type Phase = 'ready' | 'countdown' | 'running' | 'paused' | 'finished';
+
+/** Outcome of one attempt (out-lap + one timed lap). */
+export interface AttemptResult {
+  time: number;
+  valid: boolean;
+  sectors: [number, number, number];
+  sectorStatus: (SectorStatus | undefined)[];
+  /** Versus the previous personal best (null if there was none, or the lap was invalid). */
+  pbDelta: number | null;
+  newPb: boolean;
+  bestTime: number | null;
+}
 /** best = fastest ever in this sector, pb = quicker than your PB lap's sector. */
 export type SectorStatus = 'best' | 'pb' | 'slower' | 'invalid';
 
@@ -62,6 +73,7 @@ export interface HudState {
   ghostOn: boolean;
   hasGhost: boolean;
   soundOn: boolean;
+  result: AttemptResult | null;
 }
 
 export const INITIAL_HUD: HudState = {
@@ -83,15 +95,16 @@ export const INITIAL_HUD: HudState = {
   ghostOn: true,
   hasGhost: false,
   soundOn: true,
+  result: null,
 };
 
 const LIGHT_STEP = 0.5;
 const COUNTDOWN = LIGHT_STEP * 4;
 /** Cars are drawn larger in the full-track view so they stay readable. */
-const OVERVIEW_CAR_SCALE = 1.35;
+const OVERVIEW_CAR_SCALE = 1.6;
 /** Screen space reserved for the HUD above / below the track in the full-track view. */
-const HUD_TOP = 92;
-const HUD_BOTTOM = 88;
+const HUD_TOP = 58;
+const HUD_BOTTOM = 44;
 
 /**
  * Owns the frame loop: real time → fixed 120 Hz sim steps → interpolated render.
@@ -132,6 +145,7 @@ export class Game {
   private sectorStatus: (SectorStatus | undefined)[] = [];
   private sectorTimes: (number | undefined)[] = [];
   private lastLap: LapResult | null = null;
+  private result: AttemptResult | null = null;
   private flash: Flash | null = null;
   private flashTimer = 0;
   private flashId = 0;
@@ -268,9 +282,10 @@ export class Game {
         s.step(this.bits);
         this.fx.afterStep(this.prev, s.car, this.bits, s.surface);
         for (const e of s.drainEvents()) this.handleEvent(e);
+        this.acc -= DT;
+        if (this.phase !== 'running') break; // the attempt just finished
         const lt = s.lapTime;
         if (lt !== null && s.tick % 4 === 0) this.recorder.record(lt, s.car.x, s.car.y, s.car.heading);
-        this.acc -= DT;
       }
     } else {
       this.bits = 0;
@@ -341,15 +356,14 @@ export class Game {
 
   /** Whole track fitted to the screen; rotated 90° when that uses the screen better (e.g. phones). */
   private overviewView(): View {
-    // Track (with run-off) + grandstands
+    // Track + run-off (grandstands are placed inside this frame, see scenery.ts)
     const tb = this.track.bounds;
-    const sb = this.scenery.bounds;
-    const margin = this.track.half + RUNOFF + 2;
+    const margin = frameMargin(this.track);
     const b = {
-      minX: Math.min(tb.minX - margin, sb.minX - 2),
-      minY: Math.min(tb.minY - margin, sb.minY - 2),
-      maxX: Math.max(tb.maxX + margin, sb.maxX + 2),
-      maxY: Math.max(tb.maxY + margin, sb.maxY + 2),
+      minX: tb.minX - margin,
+      minY: tb.minY - margin,
+      maxX: tb.maxX + margin,
+      maxY: tb.maxY + margin,
     };
     const bw = b.maxX - b.minX;
     const bh = b.maxY - b.minY;
@@ -442,24 +456,32 @@ export class Game {
     }
   }
 
+  /** The timed lap is done: record it and end the attempt (results pop-up). */
   private recordLap(r: LapResult): void {
     this.lastLap = r;
     this.recordSector(2, r.sectors[2], r.time, r.valid);
     const frames = this.recorder.take();
-    if (!r.valid) {
-      this.showFlash('LAP INVALID', 'bad', 2.5);
-      return;
-    }
     const pb = this.records.pb;
-    if (!pb || r.time < pb.time) {
+    const pbDelta = pb && r.valid ? r.time - pb.time : null;
+    const newPb = r.valid && (!pb || r.time < pb.time);
+    if (newPb) {
       this.records.pb = { time: r.time, sectors: [...r.sectors] };
       saveRecords(this.track.def.id, this.records);
       this.ghost = new GhostPlayer(frames);
       saveGhost(this.track.def.id, frames);
-      this.showFlash(pb ? `NEW BEST  ${formatDelta(r.time - pb.time)}` : 'LAP SET', 'best', 3);
-    } else {
-      this.showFlash(formatDelta(r.time - pb.time), 'bad', 2.5);
     }
+    this.flash = null;
+    this.result = {
+      time: r.time,
+      valid: r.valid,
+      sectors: [...r.sectors],
+      sectorStatus: [...this.sectorStatus],
+      pbDelta,
+      newPb,
+      bestTime: this.records.pb?.time ?? null,
+    };
+    this.phase = 'finished';
+    this.emitHud();
   }
 
   private showFlash(text: string, tone: Flash['tone'], seconds: number): void {
@@ -473,6 +495,7 @@ export class Game {
     if (code === 'Enter' || code === 'Space') {
       if (this.phase === 'ready') this.start();
       else if (this.phase === 'paused') this.togglePause();
+      else if (this.phase === 'finished') this.restart();
     } else if (code === 'KeyR') {
       if (this.phase !== 'ready') this.restart();
     } else if (code === 'Escape' || code === 'KeyP') {
@@ -537,6 +560,7 @@ export class Game {
       ghostOn: this.settings.ghost,
       hasGhost: this.ghost !== null,
       soundOn: this.settings.sound,
+      result: this.phase === 'finished' ? this.result : null,
     });
   }
 }

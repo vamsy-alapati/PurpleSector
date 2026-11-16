@@ -37,13 +37,22 @@ export interface Scenery {
   bounds: Bounds;
 }
 
+/** The full-track view frames the track plus this margin (m); stands must fit inside it. */
+export function frameMargin(t: Track): number {
+  return t.half + RUNOFF + 3;
+}
+
 function clearOfTrack(t: Track, s: Omit<Stand, 'people' | 'count' | 'main'>, others: Stand[]): boolean {
   const minD = t.half + RUNOFF + 1.5;
   const minD2 = minD * minD;
+  const m = frameMargin(t);
+  const b0 = t.bounds;
   for (let a = -s.length / 2; a <= s.length / 2 + 0.01; a += 2) {
     for (let b = 0; b <= DEPTH + 0.01; b += DEPTH / 3) {
       const px = s.cx + s.ux * a + s.vx * b;
       const py = s.cy + s.uy * a + s.vy * b;
+      // keep stands inside the full-track frame so they never force the view to zoom out
+      if (px < b0.minX - m || px > b0.maxX + m || py < b0.minY - m || py > b0.maxY + m) return false;
       for (let i = 0; i < t.n; i++) {
         const dx = px - t.xs[i]!;
         const dy = py - t.ys[i]!;
@@ -91,12 +100,14 @@ export function buildScenery(t: Track): Scenery {
   const rand = mulberry32(hashString(`stands:${t.def.id}`));
   const stands: Stand[] = [];
 
-  // Main grandstand facing the start/finish line — try both sides
-  for (const side of [1, -1]) {
-    const s = makeStand(t, t.lines[0], side, MAIN_LENGTH);
-    if (clearOfTrack(t, s, stands)) {
-      stands.push(fillCrowd({ ...s, main: true }, rand));
-      break;
+  // Main grandstand facing the start/finish line — try both sides, then shorter
+  main: for (const length of [MAIN_LENGTH, MAIN_LENGTH * 0.7]) {
+    for (const side of [1, -1]) {
+      const s = makeStand(t, t.lines[0], side, length);
+      if (clearOfTrack(t, s, stands)) {
+        stands.push(fillCrowd({ ...s, main: true }, rand));
+        break main;
+      }
     }
   }
 
@@ -105,12 +116,14 @@ export function buildScenery(t: Track): Scenery {
   for (let k = 1; k < slots && stands.length < MAX_STANDS; k++) {
     const i = (t.lines[0] + Math.floor((k * t.n) / slots)) % t.n;
     const outside = t.gravel[i]! !== 0 ? t.gravel[i]! : rand() < 0.5 ? 1 : -1;
-    for (const side of [outside, -outside]) {
-      const s = makeStand(t, i, side, SIDE_LENGTH);
-      if (clearOfTrack(t, s, stands)) {
-        stands.push(fillCrowd({ ...s, main: false }, rand));
-        k += 1; // leave a gap before the next stand
-        break;
+    placing: for (const length of [SIDE_LENGTH, SIDE_LENGTH * 0.7]) {
+      for (const side of [outside, -outside]) {
+        const s = makeStand(t, i, side, length);
+        if (clearOfTrack(t, s, stands)) {
+          stands.push(fillCrowd({ ...s, main: false }, rand));
+          k += 1; // leave a gap before the next stand
+          break placing;
+        }
       }
     }
   }

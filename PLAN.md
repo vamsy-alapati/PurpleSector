@@ -14,6 +14,15 @@ It's inspired by the *genre* of hotlapdaily.com. Game mechanics like daily chall
 - **Restart is instant** (R) with no countdown. Timing starts at the line, so a restart never costs the player anything.
 - **A ghost of your best lap** is on by default.
 
+**Public-version decisions (agreed 2026-11-16):**
+- **One attempt = out-lap + one timed lap**, then the results pop-up (Retry / Share).
+- **No login.** On first play you pick a **unique username**, and a secret player key is stored in the browser. There's **no recovery**: a new device or a cleared browser means a new name.
+- **Leaderboard covers today only**, showing each player's best lap. It resets at **UTC midnight** with the new track, and old days are deleted. **Attempts are unlimited.**
+- **Any leaderboard lap can be raced as a ghost.** Laps are stored as input recordings, and the server re-simulates every lap before accepting it (anti-cheat).
+- **Share** uses Wordle-style spoiler-free text plus a link, through the native share sheet on phones or X / WhatsApp / Facebook / Reddit / copy on desktop. Challenge links that load a ghost come later.
+- **No user-made tracks.**
+- **Tracks are built from a blueprint:** a rectangle with notches, cut-outs and chamfers, rounded with real arcs. That gives at least 8 corners and laps of about 20–28 s.
+
 ## 2. Legal / IP rules (non-negotiable)
 
 | Don't | Do |
