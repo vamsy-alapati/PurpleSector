@@ -1,0 +1,542 @@
+import {
+  buildTrack,
+  carSpeed,
+  DT,
+  INPUT,
+  RUNOFF,
+  Session,
+  wrapAngle,
+  type CarState,
+  type LapResult,
+  type SessionEvent,
+  type Track,
+  type TrackDef,
+} from '@apex/sim';
+import { formatDelta } from '../lib/format';
+import { GameAudio } from './audio';
+import { Effects } from './effects';
+import { GhostPlayer, GhostRecorder } from './ghost';
+import { Keyboard } from './input';
+import { buildTrackGfx, drawFrame, type TrackGfx, type View } from './render';
+import { buildScenery, type Scenery } from './scenery';
+import {
+  loadGhost,
+  loadRecords,
+  loadSettings,
+  saveGhost,
+  saveRecords,
+  saveSettings,
+  type Settings,
+  type TrackRecords,
+  type ViewMode,
+} from './storage';
+
+export type Phase = 'ready' | 'countdown' | 'running' | 'paused';
+/** best = fastest ever in this sector, pb = quicker than your PB lap's sector. */
+export type SectorStatus = 'best' | 'pb' | 'slower' | 'invalid';
+
+export interface Flash {
+  id: number;
+  text: string;
+  tone: 'best' | 'good' | 'bad';
+}
+
+export interface HudState {
+  phase: Phase;
+  /** Red start lights lit (0–3) during the countdown. */
+  lights: number;
+  showGo: boolean;
+  trackName: string;
+  /** 0 = out-lap. */
+  lapNumber: number;
+  lapTime: number | null;
+  lapValid: boolean;
+  lastLap: LapResult | null;
+  bestLap: number | null;
+  sectors: (SectorStatus | undefined)[];
+  sectorTimes: (number | undefined)[];
+  speedKmh: number;
+  flash: Flash | null;
+  offTrack: boolean;
+  view: ViewMode;
+  ghostOn: boolean;
+  hasGhost: boolean;
+  soundOn: boolean;
+}
+
+export const INITIAL_HUD: HudState = {
+  phase: 'ready',
+  lights: 0,
+  showGo: false,
+  trackName: '',
+  lapNumber: 0,
+  lapTime: null,
+  lapValid: true,
+  lastLap: null,
+  bestLap: null,
+  sectors: [],
+  sectorTimes: [],
+  speedKmh: 0,
+  flash: null,
+  offTrack: false,
+  view: 'overview',
+  ghostOn: true,
+  hasGhost: false,
+  soundOn: true,
+};
+
+const LIGHT_STEP = 0.5;
+const COUNTDOWN = LIGHT_STEP * 4;
+/** Cars are drawn larger in the full-track view so they stay readable. */
+const OVERVIEW_CAR_SCALE = 1.35;
+/** Screen space reserved for the HUD above / below the track in the full-track view. */
+const HUD_TOP = 92;
+const HUD_BOTTOM = 88;
+
+/**
+ * Owns the frame loop: real time → fixed 120 Hz sim steps → interpolated render.
+ * React only receives a HUD snapshot ~30×/s; the canvas never goes through React.
+ */
+export class Game {
+  private readonly track: Track;
+  private readonly session: Session;
+  private readonly gfx: TrackGfx;
+  private readonly scenery: Scenery;
+  private readonly ctx: CanvasRenderingContext2D;
+  private readonly kb: Keyboard;
+  private readonly ro: ResizeObserver;
+  private readonly records: TrackRecords;
+  private readonly settings: Settings;
+  private readonly fx: Effects;
+  private readonly recorder = new GhostRecorder();
+  private readonly audio: GameAudio;
+  private ghost: GhostPlayer | null = null;
+  /** Smoothed visual body lean (m) and tyre rotation (m travelled). */
+  private roll = 0;
+  private wheelPhase = 0;
+
+  private prev: CarState;
+  private bits = 0;
+  private phase: Phase = 'ready';
+  private pausedFrom: Phase = 'running';
+  private countdown = 0;
+  private goTimer = 0;
+  private acc = 0;
+  private lastFrame = 0;
+  private raf = 0;
+  private hudTimer = 0;
+
+  /** Chase-camera state (updated every frame so switching views is seamless). */
+  private chase = { x: 0, y: 0, angle: 0, scale: 10, look: 0 };
+
+  private sectorStatus: (SectorStatus | undefined)[] = [];
+  private sectorTimes: (number | undefined)[] = [];
+  private lastLap: LapResult | null = null;
+  private flash: Flash | null = null;
+  private flashTimer = 0;
+  private flashId = 0;
+
+  private w = 1;
+  private h = 1;
+  private dpr = 1;
+
+  constructor(
+    private readonly canvas: HTMLCanvasElement,
+    def: TrackDef,
+    private readonly onHud: (h: HudState) => void,
+  ) {
+    this.track = buildTrack(def);
+    this.session = new Session(this.track);
+    const ctx = canvas.getContext('2d', { alpha: false });
+    if (!ctx) throw new Error('Canvas 2D is not supported in this browser');
+    this.ctx = ctx;
+    this.gfx = buildTrackGfx(ctx, this.track);
+    this.scenery = buildScenery(this.track);
+    this.records = loadRecords(def.id);
+    this.settings = loadSettings();
+    this.audio = new GameAudio(!this.settings.sound);
+    const ghostData = loadGhost(def.id);
+    if (ghostData) this.ghost = new GhostPlayer(ghostData);
+    this.fx = new Effects(() => this.carScale());
+    this.prev = { ...this.session.car };
+
+    this.kb = new Keyboard(this.handleKey);
+    this.ro = new ResizeObserver(() => this.resize());
+    this.ro.observe(canvas);
+    document.addEventListener('visibilitychange', this.handleVisibility);
+    this.resize();
+    this.snapChase();
+    this.emitHud();
+    this.raf = requestAnimationFrame(this.frame);
+  }
+
+  // ---------- public controls (used by React buttons) ----------
+
+  start(): void {
+    this.audio.ensure();
+    if (this.phase === 'ready') {
+      this.phase = 'countdown';
+      this.countdown = COUNTDOWN;
+      this.acc = 0;
+      this.emitHud();
+    }
+  }
+
+  /** Instant restart: back to the grid and straight into driving (timing starts at the line). */
+  restart(): void {
+    this.audio.ensure();
+    this.session.resetCar();
+    Object.assign(this.prev, this.session.car);
+    this.recorder.reset();
+    this.fx.clear();
+    this.sectorStatus = [];
+    this.sectorTimes = [];
+    this.flash = null;
+    this.snapChase();
+    this.phase = 'running';
+    this.acc = 0;
+    this.emitHud();
+  }
+
+  togglePause(): void {
+    if (this.phase === 'running' || this.phase === 'countdown') {
+      this.pausedFrom = this.phase;
+      this.phase = 'paused';
+    } else if (this.phase === 'paused') {
+      this.phase = this.pausedFrom;
+    }
+    this.emitHud();
+  }
+
+  toggleView(): void {
+    this.settings.view = this.settings.view === 'overview' ? 'chase' : 'overview';
+    saveSettings(this.settings);
+    this.fx.clear(); // skid marks are positioned for the old car size
+    this.snapChase();
+    this.emitHud();
+  }
+
+  toggleGhost(): void {
+    this.settings.ghost = !this.settings.ghost;
+    saveSettings(this.settings);
+    this.emitHud();
+  }
+
+  toggleSound(): void {
+    this.settings.sound = !this.settings.sound;
+    saveSettings(this.settings);
+    this.audio.ensure();
+    this.audio.setMuted(!this.settings.sound);
+    this.emitHud();
+  }
+
+  destroy(): void {
+    cancelAnimationFrame(this.raf);
+    this.audio.dispose();
+    this.kb.dispose();
+    this.ro.disconnect();
+    document.removeEventListener('visibilitychange', this.handleVisibility);
+  }
+
+  // ---------- loop ----------
+
+  private frame = (now: number) => {
+    this.raf = requestAnimationFrame(this.frame);
+    const dt = this.lastFrame ? Math.min(0.1, (now - this.lastFrame) / 1000) : 0;
+    this.lastFrame = now;
+
+    if (this.phase === 'countdown') {
+      this.countdown -= dt;
+      if (this.countdown <= 0) {
+        this.phase = 'running';
+        this.goTimer = 0.7;
+        this.acc = 0;
+      }
+    }
+    if (this.goTimer > 0) this.goTimer -= dt;
+    if (this.flashTimer > 0) {
+      this.flashTimer -= dt;
+      if (this.flashTimer <= 0) this.flash = null;
+    }
+
+    if (this.phase === 'running') {
+      this.acc += dt;
+      this.bits = this.kb.bits();
+      const s = this.session;
+      while (this.acc >= DT) {
+        Object.assign(this.prev, s.car);
+        s.step(this.bits);
+        this.fx.afterStep(this.prev, s.car, this.bits, s.surface);
+        for (const e of s.drainEvents()) this.handleEvent(e);
+        const lt = s.lapTime;
+        if (lt !== null && s.tick % 4 === 0) this.recorder.record(lt, s.car.x, s.car.y, s.car.heading);
+        this.acc -= DT;
+      }
+    } else {
+      this.bits = 0;
+    }
+    if (this.phase !== 'paused') this.fx.update(dt);
+
+    const alpha = this.phase === 'running' ? this.acc / DT : 1;
+    this.render(dt, alpha);
+
+    this.hudTimer -= dt;
+    if (this.hudTimer <= 0) {
+      this.hudTimer = 1 / 30;
+      this.emitHud();
+    }
+  };
+
+  private render(dt: number, alpha: number): void {
+    const p = this.prev;
+    const c = this.session.car;
+    const x = p.x + (c.x - p.x) * alpha;
+    const y = p.y + (c.y - p.y) * alpha;
+    const heading = p.heading + wrapAngle(c.heading - p.heading) * alpha;
+    const speed = carSpeed(c);
+
+    // Body lean from cornering load (≈5 cm per g, towards the outside of the bend)
+    const latG = (speed * c.yawRate) / 9.81;
+    this.roll += (-latG * 0.05 - this.roll) * (1 - Math.exp(-dt * 10));
+    const vLong = c.vx * Math.cos(c.heading) + c.vy * Math.sin(c.heading);
+    if (this.phase === 'running') this.wheelPhase += vLong * dt;
+
+    // Sound
+    const slip = Math.abs(-c.vx * Math.sin(c.heading) + c.vy * Math.cos(c.heading));
+    this.audio.update(
+      this.phase === 'running' || this.phase === 'countdown',
+      speed,
+      (this.bits & INPUT.THROTTLE) !== 0,
+      slip,
+      this.session.surface,
+    );
+
+    this.updateChase(dt, x, y, heading, speed);
+    const view = this.settings.view === 'overview' ? this.overviewView() : this.chaseView();
+
+    const lapTime = this.session.lapTime;
+    const g = this.settings.ghost && this.ghost && lapTime !== null ? this.ghost.poseAt(lapTime) : null;
+
+    drawFrame(this.ctx, this.w, this.h, this.dpr, {
+      track: this.track,
+      gfx: this.gfx,
+      view,
+      car: {
+        x,
+        y,
+        heading,
+        steer: c.steer,
+        braking: (this.bits & INPUT.BRAKE) !== 0,
+        roll: this.roll,
+        wheelPhase: speed < 16 ? this.wheelPhase : null,
+      },
+      ghost: g ? { ...g, steer: 0, braking: false, roll: 0, wheelPhase: null } : null,
+      fx: this.fx,
+      scenery: this.scenery,
+      time: performance.now() / 1000,
+      carScale: this.carScale(),
+      minimap: this.settings.view === 'chase',
+    });
+  }
+
+  /** Whole track fitted to the screen; rotated 90° when that uses the screen better (e.g. phones). */
+  private overviewView(): View {
+    // Track (with run-off) + grandstands
+    const tb = this.track.bounds;
+    const sb = this.scenery.bounds;
+    const margin = this.track.half + RUNOFF + 2;
+    const b = {
+      minX: Math.min(tb.minX - margin, sb.minX - 2),
+      minY: Math.min(tb.minY - margin, sb.minY - 2),
+      maxX: Math.max(tb.maxX + margin, sb.maxX + 2),
+      maxY: Math.max(tb.maxY + margin, sb.maxY + 2),
+    };
+    const bw = b.maxX - b.minX;
+    const bh = b.maxY - b.minY;
+    const areaW = Math.max(100, this.w - 24);
+    const areaH = Math.max(100, this.h - HUD_TOP - HUD_BOTTOM);
+    const rotate = areaH > areaW !== bh > bw;
+    const tw = rotate ? bh : bw;
+    const th = rotate ? bw : bh;
+    return {
+      x: (b.minX + b.maxX) / 2,
+      y: (b.minY + b.maxY) / 2,
+      rotation: rotate ? Math.PI / 2 : 0,
+      scale: Math.min(areaW / tw, areaH / th),
+      ax: 12 + areaW / 2,
+      ay: HUD_TOP + areaH / 2,
+    };
+  }
+
+  private chaseView(): View {
+    const ch = this.chase;
+    return {
+      x: ch.x,
+      y: ch.y,
+      rotation: -ch.angle - Math.PI / 2,
+      scale: ch.scale,
+      ax: this.w / 2,
+      ay: this.h * 0.64,
+    };
+  }
+
+  private updateChase(dt: number, x: number, y: number, heading: number, speed: number): void {
+    const ch = this.chase;
+    const k = (rate: number) => 1 - Math.exp(-dt * rate);
+    ch.angle += wrapAngle(heading - ch.angle) * k(7);
+    ch.look += (Math.min(speed, 80) * 0.18 - ch.look) * k(3);
+    ch.x = x + Math.cos(heading) * ch.look;
+    ch.y = y + Math.sin(heading) * ch.look;
+    const target = this.chaseBaseScale() * (1.1 - 0.35 * Math.min(1, speed / 70));
+    ch.scale += (target - ch.scale) * k(2);
+  }
+
+  // ---------- timing events ----------
+
+  private handleEvent(e: SessionEvent): void {
+    switch (e.type) {
+      case 'invalidated':
+        this.showFlash('TRACK LIMITS', 'bad', 2);
+        break;
+      case 'sector':
+        this.recordSector(e.index, e.time, e.split, e.valid);
+        break;
+      case 'lap':
+        this.recordLap(e.result);
+        break;
+      case 'lapStart':
+        this.recorder.reset();
+        break;
+    }
+  }
+
+  private classify(i: 0 | 1 | 2, time: number, valid: boolean): SectorStatus {
+    if (!valid) return 'invalid';
+    const best = this.records.bestSectors[i];
+    if (best == null || time < best) return 'best';
+    const pb = this.records.pb?.sectors[i];
+    if (pb != null && time <= pb) return 'pb';
+    return 'slower';
+  }
+
+  private recordSector(index: number, time: number, split: number, valid: boolean): void {
+    const i = index as 0 | 1 | 2;
+    if (i === 0) {
+      this.sectorStatus = [];
+      this.sectorTimes = [];
+    }
+    this.sectorStatus[i] = this.classify(i, time, valid);
+    this.sectorTimes[i] = time;
+    if (valid) {
+      const best = this.records.bestSectors[i];
+      if (best == null || time < best) {
+        this.records.bestSectors[i] = time;
+        saveRecords(this.track.def.id, this.records);
+      }
+    }
+    const pb = this.records.pb;
+    if (valid && pb && i < 2) {
+      const ref = i === 0 ? pb.sectors[0] : pb.sectors[0] + pb.sectors[1];
+      const d = split - ref;
+      this.showFlash(formatDelta(d), d < 0 ? 'good' : 'bad', 2);
+    }
+  }
+
+  private recordLap(r: LapResult): void {
+    this.lastLap = r;
+    this.recordSector(2, r.sectors[2], r.time, r.valid);
+    const frames = this.recorder.take();
+    if (!r.valid) {
+      this.showFlash('LAP INVALID', 'bad', 2.5);
+      return;
+    }
+    const pb = this.records.pb;
+    if (!pb || r.time < pb.time) {
+      this.records.pb = { time: r.time, sectors: [...r.sectors] };
+      saveRecords(this.track.def.id, this.records);
+      this.ghost = new GhostPlayer(frames);
+      saveGhost(this.track.def.id, frames);
+      this.showFlash(pb ? `NEW BEST  ${formatDelta(r.time - pb.time)}` : 'LAP SET', 'best', 3);
+    } else {
+      this.showFlash(formatDelta(r.time - pb.time), 'bad', 2.5);
+    }
+  }
+
+  private showFlash(text: string, tone: Flash['tone'], seconds: number): void {
+    this.flash = { id: ++this.flashId, text, tone };
+    this.flashTimer = seconds;
+  }
+
+  // ---------- helpers ----------
+
+  private handleKey = (code: string) => {
+    if (code === 'Enter' || code === 'Space') {
+      if (this.phase === 'ready') this.start();
+      else if (this.phase === 'paused') this.togglePause();
+    } else if (code === 'KeyR') {
+      if (this.phase !== 'ready') this.restart();
+    } else if (code === 'Escape' || code === 'KeyP') {
+      this.togglePause();
+    } else if (code === 'KeyC') {
+      this.toggleView();
+    } else if (code === 'KeyG') {
+      this.toggleGhost();
+    } else if (code === 'KeyM') {
+      this.toggleSound();
+    }
+  };
+
+  private handleVisibility = () => {
+    if (document.hidden && (this.phase === 'running' || this.phase === 'countdown')) this.togglePause();
+  };
+
+  private carScale(): number {
+    return this.settings.view === 'overview' ? OVERVIEW_CAR_SCALE : 1;
+  }
+
+  private chaseBaseScale(): number {
+    return Math.min(this.w, this.h) / 60;
+  }
+
+  private snapChase(): void {
+    const c = this.session.car;
+    this.chase = { x: c.x, y: c.y, angle: c.heading, scale: this.chaseBaseScale() * 1.1, look: 0 };
+  }
+
+  private resize(): void {
+    const rect = this.canvas.getBoundingClientRect();
+    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    this.w = Math.max(1, rect.width);
+    this.h = Math.max(1, rect.height);
+    this.canvas.width = Math.round(this.w * this.dpr);
+    this.canvas.height = Math.round(this.h * this.dpr);
+  }
+
+  private emitHud(): void {
+    const s = this.session;
+    const lights =
+      this.phase === 'countdown'
+        ? Math.min(3, Math.floor((COUNTDOWN - this.countdown) / LIGHT_STEP) + 1)
+        : 0;
+    this.onHud({
+      phase: this.phase,
+      lights,
+      showGo: this.goTimer > 0,
+      trackName: this.track.def.name,
+      lapNumber: s.lapStart !== null ? s.lapCount + 1 : 0,
+      lapTime: s.lapTime,
+      lapValid: s.lapValid,
+      lastLap: this.lastLap,
+      bestLap: this.records.pb?.time ?? null,
+      sectors: [...this.sectorStatus],
+      sectorTimes: [...this.sectorTimes],
+      speedKmh: Math.round(carSpeed(s.car) * 3.6),
+      flash: this.flash,
+      offTrack: s.surface === 'grass',
+      view: this.settings.view,
+      ghostOn: this.settings.ghost,
+      hasGhost: this.ghost !== null,
+      soundOn: this.settings.sound,
+    });
+  }
+}
