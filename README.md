@@ -1,4 +1,4 @@
-# Apex Daily
+# Purple Sector
 
 A daily time-trial racing game for the browser. Every day there's one new track, and everyone in the world drives the same one. Laps take 15–25 seconds, so you can always fit in one more try.
 

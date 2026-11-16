@@ -11,7 +11,7 @@ import {
   type SessionEvent,
   type Track,
   type TrackDef,
-} from '@apex/sim';
+} from '@purple-sector/sim';
 import { formatDelta } from '../lib/format';
 import { GameAudio } from './audio';
 import { Effects } from './effects';

@@ -2,7 +2,7 @@
  * Grandstands with animated crowds. Purely visual (not part of the sim), but placed
  * deterministically from the track id so everyone sees the same layout.
  */
-import { hashString, mulberry32, RUNOFF, type Bounds, type Track } from '@apex/sim';
+import { hashString, mulberry32, RUNOFF, type Bounds, type Track } from '@purple-sector/sim';
 
 const GAP_BEHIND_BARRIER = 2.5;
 const DEPTH = 7.5;
@@ -166,7 +166,7 @@ export function drawScenery(ctx: CanvasRenderingContext2D, sc: Scenery, time: nu
       ctx.font = 'bold 0.45px system-ui, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      ctx.fillText('APEX DAILY  ·  APEX DAILY  ·  APEX DAILY', 0, DEPTH - 0.34);
+      ctx.fillText('PURPLE SECTOR  ·  PURPLE SECTOR  ·  PURPLE SECTOR', 0, DEPTH - 0.34);
     }
 
     // Crowd excitement: distance from the car to the stand centre

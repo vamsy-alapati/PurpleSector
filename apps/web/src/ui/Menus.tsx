@@ -36,7 +36,7 @@ export function StartMenu({
 }) {
   return (
     <Overlay>
-      <div className="text-[11px] font-black tracking-[0.5em] text-red-400">APEX DAILY</div>
+      <div className="text-[11px] font-black tracking-[0.5em] text-fuchsia-400">PURPLE SECTOR</div>
       <h1 className="mt-2 text-3xl font-black sm:text-4xl">One track. One day.</h1>
       <p className="mt-1 text-white/60">Find the limit.</p>
 

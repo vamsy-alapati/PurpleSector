@@ -1,6 +1,6 @@
-# Project Plan — Daily Time-Trial Racing Game (working title: **Apex Daily**)
+# Purple Sector — Project Plan
 
-> Working title only. Before launch, check that the name and domain are free and not trademarked.
+> Name chosen: **Purple Sector** ("going purple" = fastest of anyone in a sector). Still to do before launch: check the trademark, domain and social handles.
 
 ## 1. Concept
 
@@ -57,7 +57,7 @@ Hosting cost at launch is **$0**. A custom domain is optional.
 ## 5. Architecture
 
 ```
-apex-daily/  (npm workspaces monorepo)
+purple-sector/  (npm workspaces monorepo)
 ├── packages/
 │   └── sim/            # PURE TS, no DOM — shared by client and server
 │       ├── physics.ts      car model, fixed 120 Hz timestep, deterministic

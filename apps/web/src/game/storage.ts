@@ -34,25 +34,25 @@ function write(key: string, value: unknown): void {
 }
 
 export function loadRecords(trackId: string): TrackRecords {
-  return read<TrackRecords>(`apex:records:${trackId}`) ?? { pb: null, bestSectors: [null, null, null] };
+  return read<TrackRecords>(`ps:records:${trackId}`) ?? { pb: null, bestSectors: [null, null, null] };
 }
 
 export function saveRecords(trackId: string, r: TrackRecords): void {
-  write(`apex:records:${trackId}`, r);
+  write(`ps:records:${trackId}`, r);
 }
 
 export function loadGhost(trackId: string): GhostData | null {
-  return read<GhostData>(`apex:ghost:${trackId}`);
+  return read<GhostData>(`ps:ghost:${trackId}`);
 }
 
 export function saveGhost(trackId: string, g: GhostData): void {
-  write(`apex:ghost:${trackId}`, g);
+  write(`ps:ghost:${trackId}`, g);
 }
 
 export function loadSettings(): Settings {
-  return { ...DEFAULT_SETTINGS, ...read<Partial<Settings>>('apex:settings') };
+  return { ...DEFAULT_SETTINGS, ...read<Partial<Settings>>('ps:settings') };
 }
 
 export function saveSettings(s: Settings): void {
-  write('apex:settings', s);
+  write('ps:settings', s);
 }

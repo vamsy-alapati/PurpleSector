@@ -1,4 +1,4 @@
-import { KERB, mulberry32, RUNOFF, type Track } from '@apex/sim';
+import { KERB, mulberry32, RUNOFF, type Track } from '@purple-sector/sim';
 import { CAR_PIVOT, type Effects } from './effects';
 import { drawScenery, type Scenery } from './scenery';
 

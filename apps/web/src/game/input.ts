@@ -1,4 +1,4 @@
-import { INPUT } from '@apex/sim';
+import { INPUT } from '@purple-sector/sim';
 
 const THROTTLE = ['ArrowUp', 'KeyW'];
 const BRAKE = ['ArrowDown', 'KeyS'];

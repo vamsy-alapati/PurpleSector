@@ -1,5 +1,5 @@
 {
-  "name": "apex-daily",
+  "name": "purple-sector",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -7,9 +7,9 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "npm run dev -w @apex/web",
-    "build": "npm run build -w @apex/web",
-    "preview": "npm run preview -w @apex/web",
+    "dev": "npm run dev -w @purple-sector/web",
+    "build": "npm run build -w @purple-sector/web",
+    "preview": "npm run preview -w @purple-sector/web",
     "typecheck": "tsc",
     "test": "vitest run"
   },

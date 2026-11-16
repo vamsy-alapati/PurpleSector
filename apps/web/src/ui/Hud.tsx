@@ -30,7 +30,7 @@ export function Hud({
     <div className="pointer-events-none absolute inset-0 font-sans text-white">
       {/* Top-left: brand + track */}
       <div className="absolute left-4 top-4 rounded-lg bg-black/45 px-3 py-2 backdrop-blur-sm">
-        <div className="text-[10px] font-black tracking-[0.35em] text-red-400">APEX DAILY</div>
+        <div className="text-[10px] font-black tracking-[0.35em] text-fuchsia-400">PURPLE SECTOR</div>
         <div className="text-sm font-semibold">{hud.trackName}</div>
         {driving && (
           <div className="text-xs text-white/60">{hud.lapNumber > 0 ? `LAP ${hud.lapNumber}` : 'OUT LAP'}</div>

@@ -1,5 +1,5 @@
 /** Purely visual effects (skid marks, smoke, dust, gravel spray). Not part of the deterministic sim. */
-import { INPUT, type CarState, type Surface } from '@apex/sim';
+import { INPUT, type CarState, type Surface } from '@purple-sector/sim';
 
 /**
  * The sim tracks the car by a point near its REAR axle; the car body is drawn this far

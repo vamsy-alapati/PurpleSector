@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { generateTrackDef, utcDateKey } from '@apex/sim';
+import { generateTrackDef, utcDateKey } from '@purple-sector/sim';
 import { Game, INITIAL_HUD, type HudState } from './game/Game';
 import { Hud } from './ui/Hud';
 import { PauseMenu, StartMenu } from './ui/Menus';
