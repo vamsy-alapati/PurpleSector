@@ -6,14 +6,14 @@
  * recording through the same deterministic simulation and uses ITS result.
  */
 import { decodeInputs, simulateAttempt } from '@purple-sector/sim';
-import { acceptsLapsFor, authPlayer, DAY_RE, dayOffset, error, json, readJson, today, trackFor, type Env } from '../../server/lib';
+import { acceptsLapsFor, authPlayer, DAY_RE, dayOffset, error, json, readJson, today, trackFor, type Env } from '../lib';
 
 interface Body {
   day?: unknown;
   inputs?: unknown;
 }
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export async function handleLaps(request: Request, env: Env): Promise<Response> {
   const player = await authPlayer(request, env);
   if (!player) return error(401, 'Unknown player');
 
@@ -75,4 +75,4 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     rank: stats?.rank ?? null,
     total: stats?.total ?? null,
   });
-};
+}

@@ -1,7 +1,7 @@
 /** GET /api/ghost?day=YYYY-MM-DD&player=<id>  →  { name, time, inputs }   (any leaderboard lap) */
-import { DAY_RE, error, json, type Env } from '../../server/lib';
+import { DAY_RE, error, json, type Env } from '../lib';
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+export async function handleGhost(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const day = url.searchParams.get('day') ?? '';
   const player = url.searchParams.get('player') ?? '';
@@ -16,4 +16,4 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
 
   // A player's best only changes when they improve; a short cache is safe and saves reads
   return json(row, 200, { 'cache-control': 'public, max-age=30' });
-};
+}

@@ -1,11 +1,11 @@
-/** Shared helpers for the API (Cloudflare Pages Functions). */
+/** Shared helpers for the API (Cloudflare Worker). */
 import { buildTrack, generateTrackDef, utcDateKey, type Track } from '@purple-sector/sim';
 
 export interface Env {
   DB: D1Database;
+  /** The game's static files (apps/web/dist). */
+  ASSETS: Fetcher;
 }
-
-export type Ctx = EventContext<Env, string, Record<string, unknown>>;
 
 export function json(data: unknown, status = 200, headers: Record<string, string> = {}): Response {
   return new Response(JSON.stringify(data), {

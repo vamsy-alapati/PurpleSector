@@ -1,10 +1,18 @@
-# Cloudflare Pages project: static site (apps/web/dist) + API (functions/) + D1 database.
+# Cloudflare Worker: serves the game (apps/web/dist) and the API (server/worker.ts), with a D1 database.
 name = "purple-sector"
-pages_build_output_dir = "apps/web/dist"
+main = "server/worker.ts"
 compatibility_date = "2025-06-01"
+
+[assets]
+directory = "apps/web/dist"
+binding = "ASSETS"
+# Requests that match a static file are served directly; anything else (i.e. /api/*) runs the Worker.
 
 [[d1_databases]]
 binding = "DB"
 database_name = "purple-sector"
 database_id = "36db2a28-1960-4b81-8004-29fb5d4c42b0"
 migrations_dir = "migrations"
+
+[observability]
+enabled = true

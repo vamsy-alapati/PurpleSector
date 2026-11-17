@@ -1,7 +1,7 @@
 /** POST /api/players  { name }  →  { id, name, token }   (create a player; no login) */
-import { error, hashToken, json, newToken, readJson, validateName, type Env } from '../../server/lib';
+import { error, hashToken, json, newToken, readJson, validateName, type Env } from '../lib';
 
-export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
+export async function handlePlayers(request: Request, env: Env): Promise<Response> {
   const body = await readJson<{ name?: unknown }>(request, 1024);
   if (!body) return error(400, 'Invalid request');
   const v = validateName(body.name);
@@ -20,4 +20,4 @@ export const onRequestPost: PagesFunction<Env> = async ({ request, env }) => {
     throw e;
   }
   return json({ id, name: v.name, token }, 201);
-};
+}

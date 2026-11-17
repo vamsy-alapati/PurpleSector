@@ -11,5 +11,5 @@
     "noUnusedLocals": true,
     "types": ["@cloudflare/workers-types"]
   },
-  "include": ["./**/*.ts", "../server/**/*.ts"]
+  "include": ["./**/*.ts"]
 }

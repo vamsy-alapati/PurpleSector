@@ -2,7 +2,7 @@
  * GET /api/leaderboard?day=YYYY-MM-DD   (Authorization optional → includes your own position)
  *   → { day, total, entries: [{ rank, playerId, name, time, sectors }], me: { rank, time } | null }
  */
-import { authPlayer, DAY_RE, error, json, today, type Env } from '../../server/lib';
+import { authPlayer, DAY_RE, error, json, today, type Env } from '../lib';
 
 const LIMIT = 100;
 
@@ -13,7 +13,7 @@ interface Row {
   sectors: string;
 }
 
-export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
+export async function handleLeaderboard(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const day = url.searchParams.get('day') ?? today();
   if (!DAY_RE.test(day)) return error(400, 'Invalid day');
@@ -48,4 +48,4 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   }
 
   return json({ day, total, entries, me });
-};
+}

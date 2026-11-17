@@ -11,7 +11,7 @@ npm install
 npm run dev        # game: http://localhost:5173   (API runs on :8788 behind it)
 ```
 
-`npm run dev` sets up the local database, then starts the game (Vite) and the API (Cloudflare Pages Functions + a local D1 database) together. Press Ctrl+C to stop both.
+`npm run dev` sets up the local database, then starts the game (Vite) and the API (the Cloudflare Worker + a local D1 database) together. Press Ctrl+C to stop both.
 
 Add `?seed=anything` to the URL to practise on a different track. Practice laps are never submitted to the leaderboard.
 
@@ -34,29 +34,30 @@ Add `?seed=anything` to the URL to practise on a different track. Practice laps 
 packages/sim   Deterministic simulation: physics, track generator, lap timing, replays.
                Shared by the browser and the API; no DOM.
 apps/web       Vite + React + Canvas client (rendering, HUD, effects, audio, leaderboard UI)
-functions/api  Cloudflare Pages Functions: players, laps (server-verified), leaderboard, ghost
-server/        Shared helpers for the API
+server/        Cloudflare Worker: worker.ts (entry), routes/ (players, laps, leaderboard, ghost), lib.ts
 migrations/    D1 (SQLite) schema
-wrangler.toml  Cloudflare config (site output dir + D1 binding)
+wrangler.toml  Cloudflare config (Worker, static assets, D1 binding)
 PLAN.md        Roadmap and decisions
 ```
 
 **How the anti-cheat works:** the game sends the list of key presses for each tick, never a time. The API re-runs them through the same deterministic simulation and records the time *it* computes.
 
-## Hosting (Cloudflare Pages + D1, free tier)
+## Hosting (Cloudflare Workers + D1, free tier)
 
-One-time setup:
+The whole app is one Cloudflare Worker (`server/worker.ts`). It serves the built game from `apps/web/dist` and handles `/api/*`. Configuration lives in `wrangler.toml`.
 
-1. `npx wrangler login` opens a browser window; log in to Cloudflare.
-2. `npx wrangler d1 create purple-sector`. Copy the printed `database_id` into `wrangler.toml`, then commit and push.
+One-time setup (already done for the live project):
+
+1. `npx wrangler login` opens a browser window; approve the access request.
+2. `npx wrangler d1 create purple-sector`. Copy the printed `database_id` into `wrangler.toml`.
 3. `npm run db:migrate:remote` creates the tables in the live database.
-4. In the Cloudflare dashboard, go to **Workers & Pages → Create → Pages → Connect to Git**, pick the repo, and enter:
+4. In the Cloudflare dashboard, go to **Workers & Pages → Create → Import a repository**, pick the repo, and enter:
+   - **Project name:** `purple-sector`
    - **Build command:** `npm run build`
-   - **Build output directory:** `apps/web/dist`
-   - **Environment variable:** `NODE_VERSION` = `22`
+   - **Deploy command:** `npx wrangler deploy`
 
-   The D1 binding (`DB`) is read from `wrangler.toml`.
+   The Node version comes from `.node-version`.
 
-After that, every push to `main` redeploys the site and the API.
+After that, every push to `main` builds and deploys automatically. If a future change adds a file to `migrations/`, run `npm run db:migrate:remote` too.
 
 All game art, sound and track designs are original. They're generated in code and use no third-party assets.
