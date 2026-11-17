@@ -37,7 +37,35 @@ interface OffroadGrip {
   gripRate: number;
 }
 
-export const CAR = {
+export interface CarParams {
+  maxAccel: number;
+  power: number;
+  drag: number;
+  rolling: number;
+  brake: number;
+  reverseAccel: number;
+  maxReverse: number;
+  wheelbase: number;
+  maxSteerTan: number;
+  latMax: number;
+  gripRate: number;
+  yawResponse: number;
+  steerIn: number;
+  steerOut: number;
+  offroad: Record<'grass' | 'gravel', OffroadGrip>;
+  /**
+   * v1 (≤ 2026-11-17): off-road reverse ignored the power cut and halved rolling resistance
+   * (reversing out of gravel was faster than driving forward). v2: reverse is cut like forward.
+   */
+  offroadReverse: 'v1' | 'v2';
+}
+
+/**
+ * Physics rules are VERSIONED BY TRACK DAY. Laps are verified and ghosts replayed by
+ * re-running inputs, so a day's rules must never change after that day has started.
+ * To tune the car: add a new version, effective from a future day (see physicsFor).
+ */
+export const CAR_V1: CarParams = {
   /** Max acceleration from the engine (m/s²). */
   maxAccel: 15,
   /** Power-ish constant: engine accel = min(maxAccel, power / speed). */
@@ -63,8 +91,28 @@ export const CAR = {
     grass: { accelMul: 0.8, extraDrag: 0.002, extraRolling: 1.5, latMax: 26, gripRate: 6 },
     /** Gravel traps on the outside of tight bends: properly slow and slidey. */
     gravel: { accelMul: 0.45, extraDrag: 0.007, extraRolling: 6, latMax: 14, gripRate: 3 },
-  } satisfies Record<'grass' | 'gravel', OffroadGrip>,
-} as const;
+  },
+  offroadReverse: 'v1',
+};
+
+/** From 2026-11-18: you can drive forward out of gravel; off-road reverse is slower than forward. */
+export const CAR_V2: CarParams = {
+  ...CAR_V1,
+  offroad: {
+    grass: CAR_V1.offroad.grass,
+    gravel: { accelMul: 0.55, extraDrag: 0.006, extraRolling: 3.5, latMax: 14, gripRate: 3 },
+  },
+  offroadReverse: 'v2',
+};
+
+/** The current rules (used for practice seeds and any future day). */
+export const CAR = CAR_V2;
+
+/** Rules for a track id: daily tracks use the version in force on that day. */
+export function physicsFor(trackId: string): CarParams {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trackId) && trackId < '2026-11-18') return CAR_V1;
+  return CAR_V2;
+}
 
 export function createCar(x: number, y: number, heading: number): CarState {
   return { x, y, heading, vx: 0, vy: 0, yawRate: 0, steer: 0 };
@@ -74,12 +122,13 @@ export function carSpeed(c: CarState): number {
   return Math.sqrt(c.vx * c.vx + c.vy * c.vy);
 }
 
-export function stepCar(c: CarState, input: number, surface: Surface): void {
+export function stepCar(c: CarState, input: number, surface: Surface, CAR: CarParams = CAR_V2): void {
   const throttle = (input & INPUT.THROTTLE) !== 0;
   const brake = (input & INPUT.BRAKE) !== 0;
   const left = (input & INPUT.LEFT) !== 0;
   const right = (input & INPUT.RIGHT) !== 0;
   const off: OffroadGrip | null = surface === 'track' ? null : CAR.offroad[surface];
+  const v2 = CAR.offroadReverse === 'v2';
 
   // --- Steering (smoothed so digital keys feel analogue) ---
   const target = (right ? 1 : 0) - (left ? 1 : 0);
@@ -102,20 +151,21 @@ export function stepCar(c: CarState, input: number, surface: Surface): void {
   }
   if (brake) {
     if (vLong > 0.5) a -= CAR.brake;
-    else if (!throttle) a -= CAR.reverseAccel;
+    else if (!throttle) a -= v2 && off ? CAR.reverseAccel * off.accelMul : CAR.reverseAccel;
   }
   const drag = CAR.drag + (off ? off.extraDrag : 0);
   a -= drag * vLong * Math.abs(vLong);
 
   const before = vLong;
   vLong += a * DT;
-  // Off-road rolling resistance is halved when reversing, so you can always back out
-  const offRolling = off ? (vLong < 0 ? off.extraRolling * 0.5 : off.extraRolling) : 0;
+  // v1 halved off-road rolling resistance in reverse; v2 treats both directions the same
+  const offRolling = off ? (!v2 && vLong < 0 ? off.extraRolling * 0.5 : off.extraRolling) : 0;
   const rolling = (CAR.rolling + offRolling) * DT;
   if (vLong > 0) vLong = Math.max(0, vLong - rolling);
   else if (vLong < 0) vLong = Math.min(0, vLong + rolling);
   if (brake && before > 0.5 && vLong < 0) vLong = 0;
-  if (vLong < -CAR.maxReverse) vLong = -CAR.maxReverse;
+  const maxReverse = v2 && off ? CAR.maxReverse * off.accelMul : CAR.maxReverse;
+  if (vLong < -maxReverse) vLong = -maxReverse;
 
   // --- Lateral grip: scrub sideways velocity ---
   const grip = off ? off.gripRate : CAR.gripRate;

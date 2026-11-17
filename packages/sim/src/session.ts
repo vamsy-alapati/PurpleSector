@@ -4,7 +4,7 @@
  * under a millisecond even though physics runs at 120 Hz.
  */
 import { atan2 } from './detmath';
-import { createCar, DT, stepCar, type CarState, type Surface } from './physics';
+import { createCar, DT, physicsFor, stepCar, type CarParams, type CarState, type Surface } from './physics';
 import { circDist, locate, type Track } from './track';
 
 /** Kerb width beyond the road edge that still counts as track surface (m). */
@@ -48,8 +48,11 @@ export class Session {
   lapCount = 0;
   laps: LapResult[] = [];
   private events: SessionEvent[] = [];
+  /** Car rules for this track (versioned by day so old laps always replay exactly). */
+  readonly physics: CarParams;
 
   constructor(readonly track: Track) {
+    this.physics = physicsFor(track.def.id);
     this.resetCar();
   }
 
@@ -89,7 +92,7 @@ export class Session {
     const px = c.x;
     const py = c.y;
 
-    stepCar(c, input, this.surface);
+    stepCar(c, input, this.surface, this.physics);
     this.tick++;
 
     const loc = locate(t, c.x, c.y, this.idx);

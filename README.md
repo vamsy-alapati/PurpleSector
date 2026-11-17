@@ -68,3 +68,7 @@ If a player loses access to their name (e.g. the site address changed before rec
 1. They register a temporary name on the live site, e.g. `Black2`.
 2. Run `node scripts/transfer-name.mjs --old "Black" --temp "Black2"` to see both players (dry run).
 3. Add `--apply` to do it. Their device now signs in as `Black`, their best laps are merged, and the temporary name is removed. They just reload the game.
+
+### Changing the car physics
+
+Laps are verified, and ghosts replayed, by re-running inputs. So **a day's physics must never change once that day has started.** To tune the car, add a new `CarParams` version in `packages/sim/src/physics.ts` and make `physicsFor()` return it only from a **future** day. Existing laps keep replaying exactly.

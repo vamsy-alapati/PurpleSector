@@ -4,7 +4,11 @@ import {
   buildTrack,
   carSpeed,
   cos,
+  CAR_V1,
+  CAR_V2,
   createCar,
+  physicsFor,
+  type CarParams,
   decodeInputs,
   encodeInputs,
   MAX_ATTEMPT_TICKS,
@@ -101,6 +105,33 @@ describe('surfaces', () => {
     const car = createCar(0, 0, 0);
     for (let i = 0; i < 120 * 2; i++) stepCar(car, INPUT.BRAKE, 'grass');
     expect(car.vx).toBeLessThan(-8);
+  });
+
+  /** Speed (m/s, positive) after `secs` of throttle or reverse from standstill on a surface. */
+  const speedAfter = (input: number, surface: 'grass' | 'gravel', params: CarParams, secs = 2) => {
+    const car = createCar(0, 0, 0);
+    for (let i = 0; i < 120 * secs; i++) stepCar(car, input, surface, params);
+    return Math.abs(car.vx);
+  };
+
+  it('v2: on gravel and grass, driving forward is faster than reversing', () => {
+    for (const s of ['gravel', 'grass'] as const) {
+      const fwd = speedAfter(INPUT.THROTTLE, s, CAR_V2);
+      const rev = speedAfter(INPUT.BRAKE, s, CAR_V2);
+      console.log(`v2 ${s}: forward ${(fwd * 3.6).toFixed(0)} km/h vs reverse ${(rev * 3.6).toFixed(0)} km/h after 2 s`);
+      expect(fwd).toBeGreaterThan(rev);
+    }
+    // ...and you can genuinely drive out of gravel (> 25 km/h within 2 s)
+    expect(speedAfter(INPUT.THROTTLE, 'gravel', CAR_V2)).toBeGreaterThan(7);
+  });
+
+  it('rules are versioned by day: up to 2026-11-17 keeps v1, later days and practice use v2', () => {
+    expect(physicsFor('2026-11-16')).toBe(CAR_V1);
+    expect(physicsFor('2026-11-17')).toBe(CAR_V1);
+    expect(physicsFor('2026-11-18')).toBe(CAR_V2);
+    expect(physicsFor('my-practice-seed')).toBe(CAR_V2);
+    // v1 behaviour is untouched (the bug is preserved for laps already driven under it)
+    expect(speedAfter(INPUT.BRAKE, 'gravel', CAR_V1)).toBeGreaterThan(speedAfter(INPUT.THROTTLE, 'gravel', CAR_V1));
   });
 });
 
