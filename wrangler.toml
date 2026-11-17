@@ -6,6 +6,5 @@ compatibility_date = "2025-06-01"
 [[d1_databases]]
 binding = "DB"
 database_name = "purple-sector"
-# Replaced with the real id after `npx wrangler d1 create purple-sector` (see README → Hosting).
-database_id = "00000000-0000-0000-0000-000000000000"
+database_id = "36db2a28-1960-4b81-8004-29fb5d4c42b0"
 migrations_dir = "migrations"
