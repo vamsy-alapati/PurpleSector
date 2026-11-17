@@ -11,9 +11,8 @@
  * (best lap per day wins); the temp player is deleted. Their game picks up the old name on reload.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
 const args = process.argv.slice(2);
 const arg = (k) => {
@@ -33,19 +32,25 @@ const q = (s) => `'${s.toLowerCase().replace(/'/g, "''")}'`;
 const O = `(SELECT id FROM players WHERE name_key = ${q(oldName)})`;
 const T = `(SELECT id FROM players WHERE name_key = ${q(tempName)})`;
 
+const WRANGLER = join(dirname(fileURLToPath(import.meta.url)), '..', 'node_modules', 'wrangler', 'bin', 'wrangler.js');
+
+/** Run SQL through wrangler (no shell, so names with spaces/quotes are passed safely). Returns parsed JSON. */
 function d1(sql) {
-  const dir = mkdtempSync(join(tmpdir(), 'ps-transfer-'));
-  const file = join(dir, 'q.sql');
-  writeFileSync(file, sql);
-  return execFileSync('npx', ['wrangler', 'd1', 'execute', 'purple-sector', ...where, '--file', file, '--json'], {
-    encoding: 'utf8',
-    shell: process.platform === 'win32',
-  });
+  const out = execFileSync(
+    process.execPath,
+    [WRANGLER, 'd1', 'execute', 'purple-sector', ...where, '--command', sql.replace(/\s+/g, ' ').trim(), '--json'],
+    { encoding: 'utf8' },
+  );
+  const start = out.search(/^\s*\[/m);
+  if (start < 0) throw new Error(`Unexpected output from wrangler:\n${out}`);
+  return JSON.parse(out.slice(start));
 }
 
-const preview = JSON.parse(
-  d1(`SELECT p.name, p.created_at, (SELECT COUNT(*) FROM laps l WHERE l.player_id = p.id) AS laps
-      FROM players p WHERE p.name_key IN (${q(oldName)}, ${q(tempName)});`),
+const preview = d1(
+  `SELECT p.name, datetime(p.created_at / 1000, 'unixepoch') AS created_utc,
+          (SELECT COUNT(*) FROM laps l WHERE l.player_id = p.id) AS laps,
+          (SELECT MIN(time) FROM laps l WHERE l.player_id = p.id) AS best
+     FROM players p WHERE p.name_key IN (${q(oldName)}, ${q(tempName)});`,
 )[0].results;
 console.table(preview);
 const names = preview.map((r) => r.name.toLowerCase());
