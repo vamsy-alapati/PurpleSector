@@ -4,3 +4,4 @@ export * from './physics';
 export * from './track';
 export * from './session';
 export * from './generator';
+export * from './replay';

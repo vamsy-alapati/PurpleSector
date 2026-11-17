@@ -202,7 +202,8 @@ export interface Location {
   lat: number;
 }
 
-const SEARCH_WINDOW = 30;
+/** ±samples searched around the previous position (car moves < 1 m per tick; samples are ~2 m apart). */
+const SEARCH_WINDOW = 12;
 
 /**
  * Find the nearest centreline sample. With a hint (the previous index) only a local

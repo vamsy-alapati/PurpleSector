@@ -27,13 +27,34 @@ export function StartMenu({
   trackName,
   dateLabel,
   best,
+  playerName,
   onStart,
+  onRegister,
+  onPlayOffline,
+  onLeaderboard,
 }: {
   trackName: string;
   dateLabel: string;
   best: number | null;
+  /** null → first visit: ask for a username before the first lap. */
+  playerName: string | null;
   onStart: () => void;
+  /** Resolves to an error message, or null on success. `offline` = server unreachable. */
+  onRegister: (name: string) => Promise<{ error: string; offline: boolean } | null>;
+  onPlayOffline: () => void;
+  onLeaderboard: () => void;
 }) {
+  const [name, setName] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<{ error: string; offline: boolean } | null>(null);
+
+  const register = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setErr(await onRegister(name));
+    setBusy(false);
+  };
+
   return (
     <Overlay>
       <div className="text-[11px] font-black tracking-[0.5em] text-fuchsia-400">PURPLE SECTOR</div>
@@ -56,13 +77,61 @@ export function StartMenu({
         </div>
       </div>
 
+      {playerName === null ? (
+        <form onSubmit={register} className="mt-6 text-left">
+          <label className="text-[10px] font-bold tracking-widest text-white/50" htmlFor="ps-name">
+            PICK YOUR DRIVER NAME
+          </label>
+          <input
+            id="ps-name"
+            autoFocus
+            maxLength={16}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="3–16 letters or numbers"
+            className="mt-1 w-full rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-lg font-bold outline-none placeholder:text-white/25 focus:border-fuchsia-400"
+          />
+          {err && <p className="mt-2 text-sm text-red-400">{err.error}</p>}
+          <button
+            type="submit"
+            disabled={busy || name.trim().length < 3}
+            className="mt-3 w-full rounded-xl bg-red-500 px-6 py-3 text-lg font-black tracking-wide text-white transition hover:bg-red-400 active:scale-[0.98] disabled:opacity-40"
+          >
+            {busy ? 'CHECKING…' : 'START ENGINE'}
+          </button>
+          {err?.offline && (
+            <button
+              type="button"
+              onClick={onPlayOffline}
+              className="mt-2 w-full rounded-xl bg-white/10 px-6 py-2 text-sm font-bold hover:bg-white/20"
+            >
+              Play offline (times won't be saved)
+            </button>
+          )}
+          <p className="mt-2 text-xs text-white/40">
+            Your name is saved in this browser — no account needed. It's unique, and can't be moved to another device.
+          </p>
+        </form>
+      ) : (
+        <>
+          <button
+            onClick={onStart}
+            className="mt-6 w-full rounded-xl bg-red-500 px-6 py-3 text-lg font-black tracking-wide text-white transition hover:bg-red-400 active:scale-[0.98]"
+          >
+            START ENGINE
+          </button>
+          <p className="mt-2 text-xs text-white/40">
+            Driving as <span className="font-bold text-white/70">{playerName}</span> · or press Enter
+          </p>
+        </>
+      )}
+
       <button
-        onClick={onStart}
-        className="mt-6 w-full rounded-xl bg-red-500 px-6 py-3 text-lg font-black tracking-wide text-white transition hover:bg-red-400 active:scale-[0.98]"
+        onClick={onLeaderboard}
+        className="mt-3 w-full rounded-xl bg-white/10 px-6 py-2.5 font-bold transition hover:bg-white/20"
       >
-        START ENGINE
+        🏆 Leaderboard
       </button>
-      <p className="mt-2 text-xs text-white/40">or press Enter</p>
 
       <div className="mt-6 grid grid-cols-2 gap-x-6 gap-y-1 text-left text-sm text-white/70">
         <Key k="↑ / W">Throttle</Key>
@@ -72,9 +141,9 @@ export function StartMenu({
         <Key k="C">Full track / chase cam</Key>
         <Key k="G">Ghost on / off</Key>
         <Key k="M">Sound on / off</Key>
+        <Key k="L">Leaderboard</Key>
         <Key k="Esc">Pause</Key>
       </div>
-      <p className="mt-4 text-xs text-white/35">Touch controls arrive in Phase 4.</p>
     </Overlay>
   );
 }

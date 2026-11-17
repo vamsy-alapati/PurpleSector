@@ -14,11 +14,16 @@ export function playUrl(): string {
 }
 
 /** Spoiler-free, Wordle-style result text. */
-export function shareText(r: AttemptResult, trackName: string, dateLabel: string): string {
+export function shareText(
+  r: AttemptResult,
+  trackName: string,
+  dateLabel: string,
+  rank: { rank: number; total: number } | null,
+): string {
   const sectors = r.sectorStatus.map((s) => (s ? SECTOR_EMOJI[s] : '⬜')).join('');
   return [
     `🟣 Purple Sector · ${trackName} (${dateLabel})`,
-    `⏱️ ${formatTime(r.time)}  ${sectors}`,
+    `⏱️ ${formatTime(r.time)}  ${sectors}${rank ? `  🏁 #${rank.rank}/${rank.total}` : ''}`,
     `Can you beat it?`,
   ].join('\n');
 }

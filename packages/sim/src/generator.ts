@@ -304,8 +304,9 @@ export function trackProblem(t: Track): string | null {
   const minSep = t.def.width + 2 * RUNOFF + 4;
   const minSep2 = minSep * minSep;
   const skip = Math.ceil(70 / t.spacing);
-  for (let i = 0; i < t.n; i++) {
-    for (let j = i + skip; j < t.n; j++) {
+  for (let i = 0; i < t.n; i += 2) {
+    // every other sample (~4 m) is plenty when the required gap is ~32 m
+    for (let j = i + skip; j < t.n; j += 2) {
       if (circDist(i, j, t.n) < skip) continue;
       const dx = t.xs[i]! - t.xs[j]!;
       const dy = t.ys[i]! - t.ys[j]!;

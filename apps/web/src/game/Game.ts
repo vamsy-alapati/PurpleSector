@@ -2,6 +2,7 @@ import {
   buildTrack,
   carSpeed,
   DT,
+  encodeInputs,
   INPUT,
   Session,
   wrapAngle,
@@ -74,6 +75,7 @@ export interface HudState {
   hasGhost: boolean;
   soundOn: boolean;
   result: AttemptResult | null;
+  ghostLabel: string | null;
 }
 
 export const INITIAL_HUD: HudState = {
@@ -96,6 +98,7 @@ export const INITIAL_HUD: HudState = {
   hasGhost: false,
   soundOn: true,
   result: null,
+  ghostLabel: null,
 };
 
 const LIGHT_STEP = 0.5;
@@ -154,10 +157,18 @@ export class Game {
   private h = 1;
   private dpr = 1;
 
+  /** Every tick's input since the attempt began (sent to the server for verification). */
+  private attemptInputs: number[] = [];
+  /** Whose ghost is loaded (null = none). Own PB ghosts are replaced automatically on improvement. */
+  private ghostLabel: string | null = null;
+  private ghostIsOwn = false;
+
   constructor(
     private readonly canvas: HTMLCanvasElement,
     def: TrackDef,
     private readonly onHud: (h: HudState) => void,
+    /** Called when a timed lap completes: the recording to submit. */
+    private readonly onAttempt?: (a: { day: string; inputs: string; lap: LapResult }) => void,
   ) {
     this.track = buildTrack(def);
     this.session = new Session(this.track);
@@ -170,7 +181,11 @@ export class Game {
     this.settings = loadSettings();
     this.audio = new GameAudio(!this.settings.sound);
     const ghostData = loadGhost(def.id);
-    if (ghostData) this.ghost = new GhostPlayer(ghostData);
+    if (ghostData) {
+      this.ghost = new GhostPlayer(ghostData);
+      this.ghostLabel = 'Your best';
+      this.ghostIsOwn = true;
+    }
     this.fx = new Effects(() => this.carScale());
     this.prev = { ...this.session.car };
 
@@ -186,9 +201,33 @@ export class Game {
 
   // ---------- public controls (used by React buttons) ----------
 
+  get trackRef(): Track {
+    return this.track;
+  }
+
+  /** Race against someone else's lap (poses from ghostFromInputs). */
+  setGhost(frames: number[], label: string): void {
+    this.ghost = new GhostPlayer(frames);
+    this.ghostLabel = label;
+    this.ghostIsOwn = false;
+    this.settings.ghost = true;
+    saveSettings(this.settings);
+    this.emitHud();
+  }
+
+  /** Pause if driving (e.g. when a menu opens). */
+  pause(): void {
+    if (this.phase === 'running' || this.phase === 'countdown') this.togglePause();
+  }
+
+  setKeysEnabled(enabled: boolean): void {
+    this.kb.enabled = enabled;
+  }
+
   start(): void {
     this.audio.ensure();
     if (this.phase === 'ready') {
+      this.attemptInputs = [];
       this.phase = 'countdown';
       this.countdown = COUNTDOWN;
       this.acc = 0;
@@ -200,6 +239,7 @@ export class Game {
   restart(): void {
     this.audio.ensure();
     this.session.resetCar();
+    this.attemptInputs = [];
     Object.assign(this.prev, this.session.car);
     this.recorder.reset();
     this.fx.clear();
@@ -279,6 +319,7 @@ export class Game {
       const s = this.session;
       while (this.acc >= DT) {
         Object.assign(this.prev, s.car);
+        this.attemptInputs.push(this.bits);
         s.step(this.bits);
         this.fx.afterStep(this.prev, s.car, this.bits, s.surface);
         for (const e of s.drainEvents()) this.handleEvent(e);
@@ -467,9 +508,15 @@ export class Game {
     if (newPb) {
       this.records.pb = { time: r.time, sectors: [...r.sectors] };
       saveRecords(this.track.def.id, this.records);
-      this.ghost = new GhostPlayer(frames);
       saveGhost(this.track.def.id, frames);
+      // Replace the ghost only if it was our own (don't swap out a chosen rival)
+      if (this.ghostIsOwn || !this.ghost) {
+        this.ghost = new GhostPlayer(frames);
+        this.ghostLabel = 'Your best';
+        this.ghostIsOwn = true;
+      }
     }
+    if (r.valid) this.onAttempt?.({ day: this.track.def.id, inputs: encodeInputs(this.attemptInputs), lap: r });
     this.flash = null;
     this.result = {
       time: r.time,
@@ -561,6 +608,7 @@ export class Game {
       hasGhost: this.ghost !== null,
       soundOn: this.settings.sound,
       result: this.phase === 'finished' ? this.result : null,
+      ghostLabel: this.ghostLabel,
     });
   }
 }

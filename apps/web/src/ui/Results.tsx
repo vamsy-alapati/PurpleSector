@@ -3,6 +3,14 @@ import type { AttemptResult, SectorStatus } from '../game/Game';
 import { formatDelta, formatSector, formatTime } from '../lib/format';
 import { copyToClipboard, nativeShare, playUrl, SHARE_TARGETS, shareText } from '../lib/share';
 
+/** Where the lap's leaderboard submission is at. */
+export type Submission =
+  | { state: 'idle' }
+  | { state: 'sending' }
+  | { state: 'done'; rank: number; total: number; improved: boolean; best: number }
+  | { state: 'error'; message: string }
+  | { state: 'offline' };
+
 const CHIP: Record<SectorStatus, string> = {
   best: 'bg-fuchsia-500 text-white',
   pb: 'bg-emerald-500 text-black',
@@ -14,16 +22,21 @@ export function ResultsPopup({
   result,
   trackName,
   dateLabel,
+  submission,
   onRetry,
+  onLeaderboard,
 }: {
   result: AttemptResult;
   trackName: string;
   dateLabel: string;
+  submission: Submission;
   onRetry: () => void;
+  onLeaderboard: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [showTargets, setShowTargets] = useState(false);
-  const text = shareText(result, trackName, dateLabel);
+  const ranked = submission.state === 'done' ? submission : null;
+  const text = shareText(result, trackName, dateLabel, ranked ? { rank: ranked.rank, total: ranked.total } : null);
   const link = playUrl();
 
   const share = async () => {
@@ -81,8 +94,25 @@ export function ResultsPopup({
           })}
         </div>
 
-        <div className="mt-3 text-xs text-white/50">
-          Today’s best: <span className="tabular font-mono text-fuchsia-300">{formatTime(result.bestTime)}</span>
+        <div className="mt-3 text-sm">
+          {result.valid && submission.state === 'sending' && <span className="text-white/50">Submitting to the leaderboard…</span>}
+          {ranked && (
+            <span className="text-white/80">
+              Today’s rank <span className="font-black text-fuchsia-300">#{ranked.rank}</span>
+              <span className="text-white/50"> of {ranked.total}</span>
+              {!ranked.improved && (
+                <span className="block text-xs text-white/50">
+                  (your best today: <span className="tabular font-mono">{formatTime(ranked.best)}</span>)
+                </span>
+              )}
+            </span>
+          )}
+          {submission.state === 'error' && <span className="text-amber-300">Not submitted: {submission.message}</span>}
+          {submission.state === 'offline' && (
+            <span className="text-white/50">
+              Your best: <span className="tabular font-mono text-fuchsia-300">{formatTime(result.bestTime)}</span> (offline)
+            </span>
+          )}
         </div>
 
         <div className="mt-5 flex gap-2">
@@ -101,6 +131,13 @@ export function ResultsPopup({
             </button>
           )}
         </div>
+
+        <button
+          onClick={onLeaderboard}
+          className="mt-2 w-full rounded-xl bg-white/10 px-4 py-2.5 font-bold transition hover:bg-white/20"
+        >
+          🏆 Leaderboard <span className="ml-1 font-mono text-xs text-fuchsia-300">L</span>
+        </button>
 
         {result.valid && showTargets && (
           <div className="mt-3 grid grid-cols-2 gap-2 text-sm">

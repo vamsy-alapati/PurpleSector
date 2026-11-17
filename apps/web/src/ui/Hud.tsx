@@ -19,11 +19,13 @@ export function Hud({
   onToggleView,
   onToggleGhost,
   onToggleSound,
+  onLeaderboard,
 }: {
   hud: HudState;
   onToggleView: () => void;
   onToggleGhost: () => void;
   onToggleSound: () => void;
+  onLeaderboard: () => void;
 }) {
   const driving = hud.phase !== 'ready';
   return (
@@ -95,15 +97,18 @@ export function Hud({
       {/* Bottom-left: view / ghost toggles + controls hint */}
       {driving && (
         <div className="absolute bottom-4 left-4 flex flex-col items-start gap-2">
-          <div className="pointer-events-auto flex gap-2">
+          <div className="pointer-events-auto flex max-w-[calc(100vw-2rem)] flex-wrap gap-2">
             <ToggleButton onClick={onToggleView} hotkey="C">
               {hud.view === 'overview' ? 'Full track' : 'Chase cam'}
             </ToggleButton>
             <ToggleButton onClick={onToggleGhost} hotkey="G" dim={!hud.ghostOn}>
-              Ghost {hud.ghostOn ? 'on' : 'off'}
+              {hud.ghostOn && hud.ghostLabel ? `Ghost: ${hud.ghostLabel}` : `Ghost ${hud.ghostOn ? 'on' : 'off'}`}
             </ToggleButton>
             <ToggleButton onClick={onToggleSound} hotkey="M" dim={!hud.soundOn}>
               Sound {hud.soundOn ? 'on' : 'off'}
+            </ToggleButton>
+            <ToggleButton onClick={onLeaderboard} hotkey="L">
+              🏆 Leaderboard
             </ToggleButton>
           </div>
           <div className="hidden text-[11px] leading-relaxed text-white/40 md:block">

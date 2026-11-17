@@ -6,16 +6,26 @@
     "packages/*",
     "apps/*"
   ],
+  "engines": {
+    "node": ">=22.12"
+  },
   "scripts": {
-    "dev": "npm run dev -w @purple-sector/web",
+    "dev": "npm run db:migrate:local && concurrently -k -n web,api -c magenta,cyan \"npm run dev:web\" \"npm run dev:api\"",
+    "dev:web": "npm run dev -w @purple-sector/web",
+    "dev:api": "node -e \"require('fs').mkdirSync('apps/web/dist',{recursive:true})\" && wrangler pages dev --port 8788 --persist-to .wrangler/state",
+    "db:migrate:local": "wrangler d1 migrations apply purple-sector --local --persist-to .wrangler/state",
+    "db:migrate:remote": "wrangler d1 migrations apply purple-sector --remote",
     "build": "npm run build -w @purple-sector/web",
     "preview": "npm run preview -w @purple-sector/web",
-    "typecheck": "tsc",
+    "typecheck": "tsc && tsc -p functions",
     "test": "vitest run"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261116.1",
+    "concurrently": "^9.2.5",
     "typescript": "^5.6.3",
     "vite": "^6.0.7",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "wrangler": "^4.163.0"
   }
 }

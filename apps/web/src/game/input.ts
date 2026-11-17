@@ -32,7 +32,14 @@ export class Keyboard {
     window.removeEventListener('blur', this.clear);
   }
 
+  /** When false (e.g. a menu has focus), keys are ignored entirely. */
+  enabled = true;
+
   private handleDown = (e: KeyboardEvent) => {
+    // Never steal keys from text fields (username box etc.)
+    const el = e.target as HTMLElement | null;
+    if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
+    if (!this.enabled) return;
     if (BLOCK_DEFAULT.has(e.code)) e.preventDefault();
     this.down.add(e.code);
     if (!e.repeat) this.onPress(e.code);

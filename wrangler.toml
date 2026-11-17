@@ -1,0 +1,11 @@
+# Cloudflare Pages project: static site (apps/web/dist) + API (functions/) + D1 database.
+name = "purple-sector"
+pages_build_output_dir = "apps/web/dist"
+compatibility_date = "2025-06-01"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "purple-sector"
+# Replaced with the real id after `npx wrangler d1 create purple-sector` (see README → Hosting).
+database_id = "00000000-0000-0000-0000-000000000000"
+migrations_dir = "migrations"

@@ -5,6 +5,10 @@ import {
   carSpeed,
   cos,
   createCar,
+  decodeInputs,
+  encodeInputs,
+  MAX_ATTEMPT_TICKS,
+  simulateAttempt,
   generateTrackDef,
   stepCar,
   INPUT,
@@ -125,5 +129,37 @@ describe('session', () => {
     for (const b of inputs) replay.step(b);
     expect(replay.car).toEqual(s.car);
     expect(replay.laps).toEqual(s.laps);
+  });
+});
+
+describe('replays', () => {
+  it('encode/decode round-trips and re-simulates to the identical lap', () => {
+    const { s, inputs } = runBot('2026-11-16', 1);
+    const enc = encodeInputs(inputs);
+    const dec = decodeInputs(enc);
+    expect(Array.from(dec)).toEqual(inputs);
+    const t = buildTrack(generateTrackDef('2026-11-16'));
+    expect(simulateAttempt(t, dec).lap).toEqual(s.laps[0]);
+    console.log(`replay: ${inputs.length} ticks → ${enc.length} chars`);
+  });
+
+  it('rejects malformed and oversized recordings', () => {
+    expect(() => decodeInputs('zz')).toThrow();
+    expect(() => decodeInputs('1' + (MAX_ATTEMPT_TICKS + 1).toString(36))).toThrow();
+  });
+
+  it('server-side verification cost (generate + build + simulate)', () => {
+    const { inputs } = runBot('2026-11-20', 1);
+    const enc = encodeInputs(inputs);
+    const t0 = performance.now();
+    const runs = 20;
+    for (let i = 0; i < runs; i++) {
+      const track = buildTrack(generateTrackDef('2026-11-20'));
+      simulateAttempt(track, decodeInputs(enc));
+    }
+    const genOnly = performance.now();
+    for (let i = 0; i < runs; i++) generateTrackDef(`2026-11-${10 + i}`);
+    const t2 = performance.now();
+    console.log(`verify: ${((genOnly - t0) / runs).toFixed(2)} ms avg; generate alone: ${((t2 - genOnly) / runs).toFixed(2)} ms avg`);
   });
 });
