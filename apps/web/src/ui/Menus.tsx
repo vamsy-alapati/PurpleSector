@@ -28,6 +28,7 @@ export function StartMenu({
   dateLabel,
   best,
   playerName,
+  touch,
   onStart,
   onRegister,
   onPlayOffline,
@@ -38,6 +39,8 @@ export function StartMenu({
   best: number | null;
   /** null → first visit: ask for a username before the first lap. */
   playerName: string | null;
+  /** Phone/tablet: show touch instructions instead of keyboard keys. */
+  touch: boolean;
   onStart: () => void;
   /** Resolves to an error message, or null on success. `offline` = server unreachable. */
   onRegister: (name: string) => Promise<{ error: string; offline: boolean } | null>;
@@ -133,6 +136,12 @@ export function StartMenu({
         🏆 Leaderboard
       </button>
 
+      {touch ? (
+        <p className="mt-5 text-sm text-white/60">
+          Left thumb: <span className="font-bold text-white">◀ ▶</span> steer · Right thumb: <span className="font-bold text-red-300">BRAKE</span> + <span className="font-bold text-emerald-300">GAS</span>
+          <span className="mt-1 block text-xs text-white/40">Landscape works best.</span>
+        </p>
+      ) : (
       <div className="mt-6 grid grid-cols-2 gap-x-6 gap-y-1 text-left text-sm text-white/70">
         <Key k="↑ / W">Throttle</Key>
         <Key k="↓ / S">Brake / reverse</Key>
@@ -144,6 +153,7 @@ export function StartMenu({
         <Key k="L">Leaderboard</Key>
         <Key k="Esc">Pause</Key>
       </div>
+      )}
     </Overlay>
   );
 }
@@ -172,8 +182,8 @@ export function PauseMenu({ onResume, onRestart }: { onResume: () => void; onRes
 
 function Overlay({ children }: { children: React.ReactNode }) {
   return (
-    <div className="absolute inset-0 flex items-center justify-center overflow-y-auto bg-black/55 p-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-neutral-950/85 p-6 text-center text-white shadow-2xl">
+    <div className="absolute inset-0 flex touch-pan-y justify-center overflow-y-auto bg-black/55 p-4 backdrop-blur-[2px]">
+      <div className="my-auto w-full max-w-sm rounded-2xl border border-white/10 bg-neutral-950/85 p-6 text-center text-white shadow-2xl">
         {children}
       </div>
     </div>

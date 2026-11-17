@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { decodeInputs, generateTrackDef, ghostFromInputs, utcDateKey } from '@purple-sector/sim';
-import { Game, INITIAL_HUD, type HudState } from './game/Game';
+import { DEFAULT_INSETS, Game, INITIAL_HUD, type HudState } from './game/Game';
 import { api, ApiError, loadPlayer, savePlayer, type Player } from './lib/api';
 import { Hud } from './ui/Hud';
 import { LeaderboardPanel } from './ui/LeaderboardPanel';
 import { PauseMenu, StartMenu } from './ui/Menus';
 import { ResultsPopup, type Submission } from './ui/Results';
+import { enterMobileFullscreen, TouchControls, useTouchDevice, useViewport } from './ui/TouchControls';
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -58,6 +59,27 @@ export default function App() {
 
   const needsName = player === null && !offline;
 
+  // ---------- touch devices ----------
+  const touch = useTouchDevice();
+  const vp = useViewport();
+  const landscape = vp.w > vp.h;
+  const onTouchBits = useCallback((bits: number) => gameRef.current?.setTouchInput(bits), []);
+
+  // Keep the full-track view clear of the on-screen controls
+  useEffect(() => {
+    const g = gameRef.current;
+    if (!g) return;
+    if (!touch) g.setInsets(DEFAULT_INSETS);
+    else if (landscape) g.setInsets({ top: 52, bottom: 8, left: Math.min(170, vp.w * 0.2), right: Math.min(170, vp.w * 0.2) });
+    else g.setInsets({ top: 120, bottom: 150, left: 8, right: 8 });
+  }, [touch, landscape, vp.w]);
+
+  /** Start driving (on phones: also try fullscreen + landscape — needs this tap/click). */
+  const startGame = useCallback(() => {
+    if (touch) void enterMobileFullscreen();
+    gameRef.current?.start();
+  }, [touch]);
+
   // Game hotkeys are off while typing a name or browsing the leaderboard
   useEffect(() => {
     gameRef.current?.setKeysEnabled(!showBoard && !(needsName && hud.phase === 'ready'));
@@ -85,7 +107,7 @@ export default function App() {
       savePlayer(p);
       setPlayer(p);
       gameRef.current?.setKeysEnabled(true);
-      gameRef.current?.start();
+      startGame();
       return null;
     } catch (e) {
       const err = e as ApiError;
@@ -108,12 +130,18 @@ export default function App() {
   return (
     <div className="fixed inset-0 overflow-hidden bg-[#0b0f0d] text-white">
       <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" />
+      {touch && (hud.phase === 'running' || hud.phase === 'countdown') && !showBoard && (
+        <TouchControls landscape={landscape} onChange={onTouchBits} />
+      )}
       <Hud
         hud={hud}
+        touch={touch}
         onToggleView={() => gameRef.current?.toggleView()}
         onToggleGhost={() => gameRef.current?.toggleGhost()}
         onToggleSound={() => gameRef.current?.toggleSound()}
         onLeaderboard={openBoard}
+        onRestart={() => gameRef.current?.restart()}
+        onPause={() => gameRef.current?.pause()}
       />
       {hud.phase === 'ready' && !showBoard && (
         <StartMenu
@@ -121,12 +149,13 @@ export default function App() {
           dateLabel={dateLabel}
           best={hud.bestLap}
           playerName={needsName ? null : (player?.name ?? 'Offline')}
-          onStart={() => gameRef.current?.start()}
+          touch={touch}
+          onStart={startGame}
           onRegister={register}
           onPlayOffline={() => {
             setOffline(true);
             gameRef.current?.setKeysEnabled(true);
-            gameRef.current?.start();
+            startGame();
           }}
           onLeaderboard={openBoard}
         />

@@ -51,8 +51,8 @@ export function ResultsPopup({
   };
 
   return (
-    <div className="absolute inset-0 flex items-center justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-[2px]">
-      <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-neutral-950/90 p-6 text-center text-white shadow-2xl">
+    <div className="absolute inset-0 flex touch-pan-y justify-center overflow-y-auto bg-black/60 p-4 backdrop-blur-[2px]">
+      <div className="my-auto w-full max-w-sm rounded-2xl border border-white/10 bg-neutral-950/90 p-6 text-center text-white shadow-2xl">
         <div className="text-[11px] font-black tracking-[0.4em] text-fuchsia-400">
           {result.valid ? (result.newPb ? 'NEW PERSONAL BEST' : 'LAP COMPLETE') : 'LAP INVALID'}
         </div>

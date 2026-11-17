@@ -59,7 +59,7 @@ export function LeaderboardPanel({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
+        <div className="min-h-0 flex-1 touch-pan-y overflow-y-auto px-2 py-2">
           {err && (
             <div className="p-6 text-center text-sm text-white/70">
               {err}

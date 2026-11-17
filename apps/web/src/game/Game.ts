@@ -109,6 +109,14 @@ const OVERVIEW_CAR_SCALE = 1.6;
 const HUD_TOP = 58;
 const HUD_BOTTOM = 44;
 
+export interface Insets {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+export const DEFAULT_INSETS: Insets = { top: HUD_TOP, bottom: HUD_BOTTOM, left: 12, right: 12 };
+
 /**
  * Owns the frame loop: real time → fixed 120 Hz sim steps → interpolated render.
  * React only receives a HUD snapshot ~30×/s; the canvas never goes through React.
@@ -162,6 +170,8 @@ export class Game {
   /** Whose ghost is loaded (null = none). Own PB ghosts are replaced automatically on improvement. */
   private ghostLabel: string | null = null;
   private ghostIsOwn = false;
+  private touchBits = 0;
+  private insets: Insets = DEFAULT_INSETS;
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -218,6 +228,16 @@ export class Game {
   /** Pause if driving (e.g. when a menu opens). */
   pause(): void {
     if (this.phase === 'running' || this.phase === 'countdown') this.togglePause();
+  }
+
+  /** Bits from the on-screen touch controls (OR-ed with the keyboard). */
+  setTouchInput(bits: number): void {
+    this.touchBits = bits;
+  }
+
+  /** Screen space (px) the full-track view should keep clear for HUD / touch controls. */
+  setInsets(insets: Insets): void {
+    this.insets = insets;
   }
 
   setKeysEnabled(enabled: boolean): void {
@@ -315,7 +335,7 @@ export class Game {
 
     if (this.phase === 'running') {
       this.acc += dt;
-      this.bits = this.kb.bits();
+      this.bits = this.kb.bits() | this.touchBits;
       const s = this.session;
       while (this.acc >= DT) {
         Object.assign(this.prev, s.car);
@@ -408,8 +428,9 @@ export class Game {
     };
     const bw = b.maxX - b.minX;
     const bh = b.maxY - b.minY;
-    const areaW = Math.max(100, this.w - 24);
-    const areaH = Math.max(100, this.h - HUD_TOP - HUD_BOTTOM);
+    const ins = this.insets;
+    const areaW = Math.max(100, this.w - ins.left - ins.right);
+    const areaH = Math.max(100, this.h - ins.top - ins.bottom);
     const rotate = areaH > areaW !== bh > bw;
     const tw = rotate ? bh : bw;
     const th = rotate ? bw : bh;
@@ -418,8 +439,8 @@ export class Game {
       y: (b.minY + b.maxY) / 2,
       rotation: rotate ? Math.PI / 2 : 0,
       scale: Math.min(areaW / tw, areaH / th),
-      ax: 12 + areaW / 2,
-      ay: HUD_TOP + areaH / 2,
+      ax: ins.left + areaW / 2,
+      ay: ins.top + areaH / 2,
     };
   }
 

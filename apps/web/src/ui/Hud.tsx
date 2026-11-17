@@ -14,24 +14,21 @@ const FLASH_STYLE = {
   bad: 'text-amber-300',
 } as const;
 
-export function Hud({
-  hud,
-  onToggleView,
-  onToggleGhost,
-  onToggleSound,
-  onLeaderboard,
-}: {
-  hud: HudState;
+export interface HudActions {
   onToggleView: () => void;
   onToggleGhost: () => void;
   onToggleSound: () => void;
   onLeaderboard: () => void;
-}) {
+  onRestart: () => void;
+  onPause: () => void;
+}
+
+export function Hud({ hud, touch, ...a }: { hud: HudState; touch: boolean } & HudActions) {
   const driving = hud.phase !== 'ready';
   return (
     <div className="pointer-events-none absolute inset-0 font-sans text-white">
-      {/* Top-left: brand + track */}
-      <div className="absolute left-4 top-4 rounded-lg bg-black/45 px-3 py-2 backdrop-blur-sm">
+      {/* Top-left: brand + track (hidden on narrow phones to make room) */}
+      <div className="absolute left-4 top-4 hidden rounded-lg bg-black/45 px-3 py-2 backdrop-blur-sm sm:block">
         <div className="text-[10px] font-black tracking-[0.35em] text-fuchsia-400">PURPLE SECTOR</div>
         <div className="text-sm font-semibold">{hud.trackName}</div>
         {driving && (
@@ -39,20 +36,26 @@ export function Hud({
         )}
       </div>
 
-      {/* Top-centre: lap timer */}
+      {/* Lap timer: top-left on narrow phones, top-centre otherwise */}
       {driving && (
-        <div className="absolute left-1/2 top-4 -translate-x-1/2 text-center">
+        <div className="absolute left-3 top-3 text-left sm:left-1/2 sm:top-4 sm:-translate-x-1/2 sm:text-center">
           <div
-            className={`tabular rounded-lg bg-black/55 px-4 py-1 font-mono text-3xl font-bold sm:text-4xl ${
+            className={`tabular inline-block rounded-lg bg-black/55 px-3 py-1 font-mono text-2xl font-bold sm:px-4 sm:text-4xl ${
               hud.lapValid ? '' : 'text-red-400 line-through decoration-2'
             }`}
           >
             {formatTime(hud.lapTime)}
           </div>
+          {touch && (
+            <div className="tabular mt-1 font-mono text-sm font-bold text-white/80 drop-shadow">
+              {hud.speedKmh} <span className="text-[10px] text-white/50">KM/H</span>
+              {hud.offTrack && <span className="ml-2 text-amber-300">OFF TRACK</span>}
+            </div>
+          )}
           {hud.flash && (
             <div
               key={hud.flash.id}
-              className={`tabular mt-2 font-mono text-lg font-bold drop-shadow ${FLASH_STYLE[hud.flash.tone]}`}
+              className={`tabular mt-1 font-mono text-base font-bold drop-shadow sm:mt-2 sm:text-lg ${FLASH_STYLE[hud.flash.tone]}`}
             >
               {hud.flash.text}
             </div>
@@ -60,33 +63,45 @@ export function Hud({
         </div>
       )}
 
-      {/* Top-right: best / last / sectors */}
-      <div className="absolute right-4 top-4 min-w-44 rounded-lg bg-black/45 px-3 py-2 text-sm backdrop-blur-sm">
-        <Row label="BEST" value={formatTime(hud.bestLap)} accent="text-fuchsia-300" />
-        <Row
-          label="LAST"
-          value={hud.lastLap ? formatTime(hud.lastLap.time) : formatTime(null)}
-          accent={hud.lastLap && !hud.lastLap.valid ? 'text-red-400 line-through' : ''}
-        />
-        <div className="mt-2 grid grid-cols-3 gap-1">
-          {[0, 1, 2].map((i) => {
-            const st = hud.sectors[i];
-            return (
-              <div
-                key={i}
-                className={`tabular rounded px-1 py-0.5 text-center font-mono text-[11px] ${
-                  st ? SECTOR_STYLE[st] : 'bg-white/10 text-white/50'
-                }`}
-              >
-                {st ? formatSector(hud.sectorTimes[i]) : `S${i + 1}`}
-              </div>
-            );
-          })}
+      {/* Top-right: best / last / sectors (+ icon buttons on touch devices) */}
+      <div className="absolute right-3 top-3 flex flex-col items-end gap-2 sm:right-4 sm:top-4">
+        <div className="min-w-36 rounded-lg bg-black/45 px-2.5 py-1.5 text-xs backdrop-blur-sm sm:min-w-44 sm:px-3 sm:py-2 sm:text-sm">
+          <Row label="BEST" value={formatTime(hud.bestLap)} accent="text-fuchsia-300" />
+          <Row
+            label="LAST"
+            value={hud.lastLap ? formatTime(hud.lastLap.time) : formatTime(null)}
+            accent={hud.lastLap && !hud.lastLap.valid ? 'text-red-400 line-through' : ''}
+          />
+          <div className="mt-1.5 grid grid-cols-3 gap-1">
+            {[0, 1, 2].map((i) => {
+              const st = hud.sectors[i];
+              return (
+                <div
+                  key={i}
+                  className={`tabular rounded px-1 py-0.5 text-center font-mono text-[10px] sm:text-[11px] ${
+                    st ? SECTOR_STYLE[st] : 'bg-white/10 text-white/50'
+                  }`}
+                >
+                  {st ? formatSector(hud.sectorTimes[i]) : `S${i + 1}`}
+                </div>
+              );
+            })}
+          </div>
         </div>
+        {touch && driving && (
+          <div className="pointer-events-auto flex flex-wrap justify-end gap-1.5">
+            <IconButton label="Pause" onClick={a.onPause}>⏸</IconButton>
+            <IconButton label="Restart" onClick={a.onRestart}>↻</IconButton>
+            <IconButton label="Camera" onClick={a.onToggleView}>{hud.view === 'overview' ? '🗺️' : '🎥'}</IconButton>
+            <IconButton label="Ghost" onClick={a.onToggleGhost} dim={!hud.ghostOn}>👻</IconButton>
+            <IconButton label="Sound" onClick={a.onToggleSound} dim={!hud.soundOn}>{hud.soundOn ? '🔊' : '🔇'}</IconButton>
+            <IconButton label="Leaderboard" onClick={a.onLeaderboard}>🏆</IconButton>
+          </div>
+        )}
       </div>
 
-      {/* Bottom-centre: speed */}
-      {driving && (
+      {/* Bottom-centre: speed (keyboard layout; on touch it sits under the timer) */}
+      {driving && !touch && (
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 text-center">
           <div className="tabular font-mono text-5xl font-black leading-none drop-shadow-lg">{hud.speedKmh}</div>
           <div className="text-[10px] font-bold tracking-[0.3em] text-white/60">KM/H</div>
@@ -94,20 +109,20 @@ export function Hud({
         </div>
       )}
 
-      {/* Bottom-left: view / ghost toggles + controls hint */}
-      {driving && (
+      {/* Bottom-left: toggles + controls hint (keyboard layout) */}
+      {driving && !touch && (
         <div className="absolute bottom-4 left-4 flex flex-col items-start gap-2">
           <div className="pointer-events-auto flex max-w-[calc(100vw-2rem)] flex-wrap gap-2">
-            <ToggleButton onClick={onToggleView} hotkey="C">
+            <ToggleButton onClick={a.onToggleView} hotkey="C">
               {hud.view === 'overview' ? 'Full track' : 'Chase cam'}
             </ToggleButton>
-            <ToggleButton onClick={onToggleGhost} hotkey="G" dim={!hud.ghostOn}>
+            <ToggleButton onClick={a.onToggleGhost} hotkey="G" dim={!hud.ghostOn}>
               {hud.ghostOn && hud.ghostLabel ? `Ghost: ${hud.ghostLabel}` : `Ghost ${hud.ghostOn ? 'on' : 'off'}`}
             </ToggleButton>
-            <ToggleButton onClick={onToggleSound} hotkey="M" dim={!hud.soundOn}>
+            <ToggleButton onClick={a.onToggleSound} hotkey="M" dim={!hud.soundOn}>
               Sound {hud.soundOn ? 'on' : 'off'}
             </ToggleButton>
-            <ToggleButton onClick={onLeaderboard} hotkey="L">
+            <ToggleButton onClick={a.onLeaderboard} hotkey="L">
               🏆 Leaderboard
             </ToggleButton>
           </div>
@@ -131,6 +146,31 @@ export function Hud({
         </div>
       )}
     </div>
+  );
+}
+
+function IconButton({
+  label,
+  onClick,
+  dim = false,
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  dim?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      aria-label={label}
+      title={label}
+      onClick={onClick}
+      className={`flex h-9 w-9 items-center justify-center rounded-lg bg-black/55 text-base backdrop-blur-sm active:bg-black/80 ${
+        dim ? 'opacity-45' : ''
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 
