@@ -61,6 +61,9 @@ async function call<T>(path: string, init: RequestInit = {}, player?: Player | n
 
 export const api = {
   register: (name: string) => call<Player>('players', { method: 'POST', body: JSON.stringify({ name }) }),
+  me: (player: Player) => call<{ id: string; name: string }>('players/me', {}, player),
+  recoveryCode: (player: Player) => call<{ code: string }>('players/recovery-code', { method: 'POST' }, player),
+  recover: (code: string) => call<Player>('players/recover', { method: 'POST', body: JSON.stringify({ code }) }),
   submitLap: (player: Player, day: string, inputs: string) =>
     call<SubmitResult>('laps', { method: 'POST', body: JSON.stringify({ day, inputs }) }, player),
   leaderboard: (day: string, player: Player | null) =>

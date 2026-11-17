@@ -25,6 +25,7 @@ export function ResultsPopup({
   submission,
   onRetry,
   onLeaderboard,
+  onSaveLap,
 }: {
   result: AttemptResult;
   trackName: string;
@@ -32,6 +33,8 @@ export function ResultsPopup({
   submission: Submission;
   onRetry: () => void;
   onLeaderboard: () => void;
+  /** Lap was driven without a name: offer to pick one and submit it. */
+  onSaveLap: (() => void) | null;
 }) {
   const [copied, setCopied] = useState(false);
   const [showTargets, setShowTargets] = useState(false);
@@ -110,10 +113,20 @@ export function ResultsPopup({
           {submission.state === 'error' && <span className="text-amber-300">Not submitted: {submission.message}</span>}
           {submission.state === 'offline' && (
             <span className="text-white/50">
-              Your best: <span className="tabular font-mono text-fuchsia-300">{formatTime(result.bestTime)}</span> (offline)
+              Your best: <span className="tabular font-mono text-fuchsia-300">{formatTime(result.bestTime)}</span> (not on the
+              leaderboard)
             </span>
           )}
         </div>
+
+        {result.valid && submission.state === 'offline' && onSaveLap && (
+          <button
+            onClick={onSaveLap}
+            className="mt-3 w-full rounded-xl border border-fuchsia-400/60 bg-fuchsia-500/15 px-4 py-2.5 font-bold text-fuchsia-100 transition hover:bg-fuchsia-500/30"
+          >
+            Pick a name to save this lap
+          </button>
+        )}
 
         <div className="mt-5 flex gap-2">
           <button

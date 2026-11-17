@@ -6,12 +6,15 @@ import { error, type Env } from './lib';
 import { handleGhost } from './routes/ghost';
 import { handleLaps } from './routes/laps';
 import { handleLeaderboard } from './routes/leaderboard';
-import { handlePlayers } from './routes/players';
+import { handleMe, handlePlayers, handleRecover, handleRecoveryCode } from './routes/players';
 
 type Handler = (request: Request, env: Env) => Promise<Response>;
 
 const ROUTES: Record<string, Partial<Record<string, Handler>>> = {
   '/api/players': { POST: handlePlayers },
+  '/api/players/me': { GET: handleMe },
+  '/api/players/recovery-code': { POST: handleRecoveryCode },
+  '/api/players/recover': { POST: handleRecover },
   '/api/laps': { POST: handleLaps },
   '/api/leaderboard': { GET: handleLeaderboard },
   '/api/ghost': { GET: handleGhost },

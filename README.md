@@ -61,3 +61,10 @@ One-time setup (already done for the live project):
 After that, every push to `main` builds and deploys automatically. If a future change adds a file to `migrations/`, run `npm run db:migrate:remote` too.
 
 All game art, sound and track designs are original. They're generated in code and use no third-party assets.
+
+### Admin: moving a stranded name to a player's new device
+
+If a player loses access to their name (e.g. the site address changed before recovery codes existed):
+1. They register a temporary name on the live site, e.g. `Black2`.
+2. Run `node scripts/transfer-name.mjs --old "Black" --temp "Black2"` to see both players (dry run).
+3. Add `--apply` to do it. Their device now signs in as `Black`, their best laps are merged, and the temporary name is removed. They just reload the game.

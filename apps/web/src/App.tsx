@@ -1,12 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { decodeInputs, generateTrackDef, ghostFromInputs, utcDateKey } from '@purple-sector/sim';
 import { DEFAULT_INSETS, Game, INITIAL_HUD, type HudState } from './game/Game';
-import { api, ApiError, loadPlayer, savePlayer, type Player } from './lib/api';
+import { api, ApiError, forgetPlayer, loadPlayer, savePlayer, type Player } from './lib/api';
 import { Hud } from './ui/Hud';
 import { LeaderboardPanel } from './ui/LeaderboardPanel';
 import { PauseMenu, StartMenu } from './ui/Menus';
+import { NameForm, type FormError } from './ui/NameForm';
+import { NamePopup, RecoveryPanel } from './ui/RecoveryPanel';
 import { ResultsPopup, type Submission } from './ui/Results';
 import { enterMobileFullscreen, TouchControls, useTouchDevice, useViewport } from './ui/TouchControls';
+
+/** The last completed attempt's recording, so it can still be submitted after picking a name. */
+interface Attempt {
+  day: string;
+  inputs: string;
+}
 
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -15,11 +23,15 @@ export default function App() {
   const [player, setPlayer] = useState<Player | null>(loadPlayer);
   const [offline, setOffline] = useState(false);
   const [showBoard, setShowBoard] = useState(false);
+  const [showRecovery, setShowRecovery] = useState(false);
+  /** Name popup shown mid-game: to save the lap just driven, or before racing a chosen ghost. */
+  const [namePopup, setNamePopup] = useState<null | 'save-lap' | 'race-ghost'>(null);
   const [submission, setSubmission] = useState<Submission>({ state: 'idle' });
 
-  // The submit callback is created once with the Game, so read the latest player via a ref
+  // Callbacks created once with the Game read the latest values through refs
   const playerRef = useRef(player);
   playerRef.current = player;
+  const lastAttempt = useRef<Attempt | null>(null);
 
   // Today's track (UTC date → seed → track). Optional ?seed=anything for testing other tracks.
   const { def, day, dateLabel, practice } = useMemo(() => {
@@ -30,27 +42,48 @@ export default function App() {
     return { def: generateTrackDef(seedParam ?? day), day, dateLabel: label, practice: seedParam !== null };
   }, []);
 
+  const submit = useCallback((p: Player, attempt: Attempt) => {
+    setSubmission({ state: 'sending' });
+    api
+      .submitLap(p, attempt.day, attempt.inputs)
+      .then((r) => setSubmission({ state: 'done', rank: r.rank ?? 0, total: r.total ?? 0, improved: r.improved, best: r.best }))
+      .catch((e: ApiError) => setSubmission({ state: 'error', message: e.message }));
+  }, []);
+
   useEffect(() => {
     const game = new Game(canvasRef.current!, def, setHud, ({ day: lapDay, inputs }) => {
+      lastAttempt.current = { day: lapDay, inputs };
       const p = playerRef.current;
-      if (!p || practice) {
-        setSubmission({ state: 'offline' });
-        return;
-      }
-      setSubmission({ state: 'sending' });
-      api
-        .submitLap(p, lapDay, inputs)
-        .then((r) =>
-          setSubmission({ state: 'done', rank: r.rank ?? 0, total: r.total ?? 0, improved: r.improved, best: r.best }),
-        )
-        .catch((e: ApiError) => setSubmission({ state: 'error', message: e.message }));
+      if (!p || practice) setSubmission({ state: 'offline' });
+      else submit(p, lastAttempt.current);
     });
     gameRef.current = game;
     return () => {
       game.destroy();
       gameRef.current = null;
     };
-  }, [def, practice]);
+  }, [def, practice, submit]);
+
+  // Refresh our identity from the server (picks up a name transfer; drops a deleted player)
+  useEffect(() => {
+    const p = playerRef.current;
+    if (!p) return;
+    api
+      .me(p)
+      .then((me) => {
+        if (me.id !== p.id || me.name !== p.name) {
+          const updated = { ...p, id: me.id, name: me.name };
+          savePlayer(updated);
+          setPlayer(updated);
+        }
+      })
+      .catch((e: ApiError) => {
+        if (e.status === 401) {
+          forgetPlayer();
+          setPlayer(null);
+        }
+      });
+  }, []);
 
   // New attempt → clear the previous submission status
   useEffect(() => {
@@ -77,13 +110,17 @@ export default function App() {
   /** Start driving (on phones: also try fullscreen + landscape — needs this tap/click). */
   const startGame = useCallback(() => {
     if (touch) void enterMobileFullscreen();
-    gameRef.current?.start();
-  }, [touch]);
+    const g = gameRef.current;
+    if (!g) return;
+    if (hud.phase === 'ready') g.start();
+    else g.restart();
+  }, [touch, hud.phase]);
 
-  // Game hotkeys are off while typing a name or browsing the leaderboard
+  // Game hotkeys are off while typing a name or a menu panel is open
+  const overlayOpen = showBoard || showRecovery || namePopup !== null;
   useEffect(() => {
-    gameRef.current?.setKeysEnabled(!showBoard && !(needsName && hud.phase === 'ready'));
-  }, [showBoard, needsName, hud.phase]);
+    gameRef.current?.setKeysEnabled(!overlayOpen && !(needsName && hud.phase === 'ready'));
+  }, [overlayOpen, needsName, hud.phase]);
 
   const openBoard = useCallback(() => {
     gameRef.current?.pause();
@@ -95,23 +132,48 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       const el = e.target as HTMLElement | null;
       if (el?.tagName === 'INPUT') return;
-      if (e.code === 'KeyL' && !showBoard) openBoard();
+      if (e.code === 'KeyL' && !overlayOpen) openBoard();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [showBoard, openBoard]);
+  }, [overlayOpen, openBoard]);
 
-  const register = async (name: string) => {
-    try {
-      const p = await api.register(name);
-      savePlayer(p);
-      setPlayer(p);
-      gameRef.current?.setKeysEnabled(true);
+  // ---------- identity ----------
+
+  const toFormError = (e: unknown): FormError => {
+    const err = e as ApiError;
+    return { error: err.message, offline: err.status === 0 || err.status >= 500 };
+  };
+
+  /** Signed in (new name or recovery code) → continue whatever the player was doing. */
+  const signedIn = (p: Player, context: 'start' | 'save-lap' | 'race-ghost') => {
+    savePlayer(p);
+    setPlayer(p);
+    playerRef.current = p;
+    setNamePopup(null);
+    gameRef.current?.setKeysEnabled(true);
+    if (context === 'save-lap') {
+      if (lastAttempt.current && !practice) submit(p, lastAttempt.current);
+    } else {
       startGame();
+    }
+  };
+
+  const register = (context: 'start' | 'save-lap' | 'race-ghost') => async (name: string) => {
+    try {
+      signedIn(await api.register(name), context);
       return null;
     } catch (e) {
-      const err = e as ApiError;
-      return { error: err.message, offline: err.status === 0 || err.status >= 500 };
+      return toFormError(e);
+    }
+  };
+
+  const recover = (context: 'start' | 'save-lap' | 'race-ghost') => async (code: string) => {
+    try {
+      signedIn(await api.recover(code), context);
+      return null;
+    } catch (e) {
+      return toFormError(e);
     }
   };
 
@@ -123,14 +185,18 @@ export default function App() {
     if (frames.length < 8) throw new Error("Couldn't rebuild that lap");
     game.setGhost(frames, name);
     setShowBoard(false);
-    if (hud.phase === 'ready') game.start();
-    else game.restart();
+    // A name is required before driving: the start screen (or a popup) asks first, then the race begins
+    if (!playerRef.current && !offline) {
+      if (hud.phase !== 'ready') setNamePopup('race-ghost');
+      return;
+    }
+    startGame();
   };
 
   return (
     <div className="fixed inset-0 overflow-hidden bg-[#0b0f0d] text-white">
       <canvas ref={canvasRef} className="absolute inset-0 block h-full w-full" />
-      {touch && (hud.phase === 'running' || hud.phase === 'countdown') && !showBoard && (
+      {touch && (hud.phase === 'running' || hud.phase === 'countdown') && !overlayOpen && (
         <TouchControls landscape={landscape} onChange={onTouchBits} />
       )}
       <Hud
@@ -143,7 +209,7 @@ export default function App() {
         onRestart={() => gameRef.current?.restart()}
         onPause={() => gameRef.current?.pause()}
       />
-      {hud.phase === 'ready' && !showBoard && (
+      {hud.phase === 'ready' && !overlayOpen && (
         <StartMenu
           trackName={hud.trackName + (practice ? ' (practice)' : '')}
           dateLabel={dateLabel}
@@ -151,19 +217,21 @@ export default function App() {
           playerName={needsName ? null : (player?.name ?? 'Offline')}
           touch={touch}
           onStart={startGame}
-          onRegister={register}
+          onRegister={register('start')}
+          onRecover={recover('start')}
           onPlayOffline={() => {
             setOffline(true);
             gameRef.current?.setKeysEnabled(true);
             startGame();
           }}
           onLeaderboard={openBoard}
+          onOtherDevice={player ? () => setShowRecovery(true) : null}
         />
       )}
-      {hud.phase === 'paused' && !showBoard && (
+      {hud.phase === 'paused' && !overlayOpen && (
         <PauseMenu onResume={() => gameRef.current?.togglePause()} onRestart={() => gameRef.current?.restart()} />
       )}
-      {hud.phase === 'finished' && hud.result && !showBoard && (
+      {hud.phase === 'finished' && hud.result && !overlayOpen && (
         <ResultsPopup
           result={hud.result}
           trackName={hud.trackName}
@@ -171,6 +239,7 @@ export default function App() {
           submission={submission}
           onRetry={() => gameRef.current?.restart()}
           onLeaderboard={openBoard}
+          onSaveLap={!player && !practice ? () => setNamePopup('save-lap') : null}
         />
       )}
       {showBoard && (
@@ -181,6 +250,16 @@ export default function App() {
           onClose={() => setShowBoard(false)}
           onRaceGhost={raceGhost}
         />
+      )}
+      {showRecovery && player && <RecoveryPanel player={player} onClose={() => setShowRecovery(false)} />}
+      {namePopup && (
+        <NamePopup onClose={() => setNamePopup(null)}>
+          <NameForm
+            submitLabel={namePopup === 'save-lap' ? 'SAVE MY LAP' : 'START ENGINE'}
+            onRegister={register(namePopup)}
+            onRecover={recover(namePopup)}
+          />
+        </NamePopup>
       )}
     </div>
   );

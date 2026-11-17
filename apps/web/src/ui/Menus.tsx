@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { formatTime } from '../lib/format';
+import { NameForm, type FormError } from './NameForm';
 
 function msUntilNextUtcMidnight(): number {
   const now = new Date();
@@ -31,8 +32,10 @@ export function StartMenu({
   touch,
   onStart,
   onRegister,
+  onRecover,
   onPlayOffline,
   onLeaderboard,
+  onOtherDevice,
 }: {
   trackName: string;
   dateLabel: string;
@@ -43,21 +46,13 @@ export function StartMenu({
   touch: boolean;
   onStart: () => void;
   /** Resolves to an error message, or null on success. `offline` = server unreachable. */
-  onRegister: (name: string) => Promise<{ error: string; offline: boolean } | null>;
+  onRegister: (name: string) => Promise<FormError>;
+  onRecover: (code: string) => Promise<FormError>;
   onPlayOffline: () => void;
   onLeaderboard: () => void;
+  /** Show the recovery code (only when signed in). */
+  onOtherDevice: (() => void) | null;
 }) {
-  const [name, setName] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [err, setErr] = useState<{ error: string; offline: boolean } | null>(null);
-
-  const register = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
-    setErr(await onRegister(name));
-    setBusy(false);
-  };
-
   return (
     <Overlay>
       <div className="text-[11px] font-black tracking-[0.5em] text-fuchsia-400">PURPLE SECTOR</div>
@@ -81,40 +76,14 @@ export function StartMenu({
       </div>
 
       {playerName === null ? (
-        <form onSubmit={register} className="mt-6 text-left">
-          <label className="text-[10px] font-bold tracking-widest text-white/50" htmlFor="ps-name">
-            PICK YOUR DRIVER NAME
-          </label>
-          <input
-            id="ps-name"
-            autoFocus
-            maxLength={16}
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="3–16 letters or numbers"
-            className="mt-1 w-full rounded-xl border border-white/15 bg-white/5 px-4 py-3 text-lg font-bold outline-none placeholder:text-white/25 focus:border-fuchsia-400"
+        <div className="mt-6">
+          <NameForm
+            submitLabel="START ENGINE"
+            onRegister={onRegister}
+            onRecover={onRecover}
+            onPlayOffline={onPlayOffline}
           />
-          {err && <p className="mt-2 text-sm text-red-400">{err.error}</p>}
-          <button
-            type="submit"
-            disabled={busy || name.trim().length < 3}
-            className="mt-3 w-full rounded-xl bg-red-500 px-6 py-3 text-lg font-black tracking-wide text-white transition hover:bg-red-400 active:scale-[0.98] disabled:opacity-40"
-          >
-            {busy ? 'CHECKING…' : 'START ENGINE'}
-          </button>
-          {err?.offline && (
-            <button
-              type="button"
-              onClick={onPlayOffline}
-              className="mt-2 w-full rounded-xl bg-white/10 px-6 py-2 text-sm font-bold hover:bg-white/20"
-            >
-              Play offline (times won't be saved)
-            </button>
-          )}
-          <p className="mt-2 text-xs text-white/40">
-            Your name is saved in this browser — no account needed. It's unique, and can't be moved to another device.
-          </p>
-        </form>
+        </div>
       ) : (
         <>
           <button
@@ -124,8 +93,14 @@ export function StartMenu({
             START ENGINE
           </button>
           <p className="mt-2 text-xs text-white/40">
-            Driving as <span className="font-bold text-white/70">{playerName}</span> · or press Enter
+            Driving as <span className="font-bold text-white/70">{playerName}</span>
+            {!touch && ' · or press Enter'}
           </p>
+          {onOtherDevice && (
+            <button onClick={onOtherDevice} className="mt-1 text-xs text-fuchsia-300/80 underline hover:text-fuchsia-200">
+              Use this name on another device
+            </button>
+          )}
         </>
       )}
 

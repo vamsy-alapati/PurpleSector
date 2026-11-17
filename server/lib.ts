@@ -82,11 +82,41 @@ export interface PlayerRow {
   name: string;
 }
 
-/** The player behind `Authorization: Bearer <token>`, or null. */
+/** The player behind `Authorization: Bearer <token>`, or null. A player may have several device keys. */
 export async function authPlayer(request: Request, env: Env): Promise<PlayerRow | null> {
   const m = /^Bearer ([0-9a-f]{64})$/.exec(request.headers.get('authorization') ?? '');
   if (!m) return null;
-  return env.DB.prepare('SELECT id, name FROM players WHERE token_hash = ?').bind(await hashToken(m[1]!)).first<PlayerRow>();
+  return env.DB.prepare(
+    `SELECT id, name FROM players WHERE token_hash = ?1
+     UNION ALL
+     SELECT p.id, p.name FROM player_tokens t JOIN players p ON p.id = t.player_id WHERE t.token_hash = ?1
+     LIMIT 1`,
+  )
+    .bind(await hashToken(m[1]!))
+    .first<PlayerRow>();
+}
+
+// ---------- recovery codes ----------
+
+/** Crockford base32 (no I, L, O, U → nothing to misread). */
+const CODE_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
+
+/** 12 characters = 60 random bits, shown as XXXX-XXXX-XXXX. */
+export function newRecoveryCode(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(12));
+  const chars = [...bytes].map((b) => CODE_ALPHABET[b & 31]!).join('');
+  return `${chars.slice(0, 4)}-${chars.slice(4, 8)}-${chars.slice(8, 12)}`;
+}
+
+/** Forgiving input: case, spaces and dashes don't matter; O→0 and I/L→1. Null if not a valid code. */
+export function normaliseRecoveryCode(raw: unknown): string | null {
+  if (typeof raw !== 'string') return null;
+  const s = raw
+    .toUpperCase()
+    .replace(/[\s-]/g, '')
+    .replace(/O/g, '0')
+    .replace(/[IL]/g, '1');
+  return /^[0-9A-HJKMNP-TV-Z]{12}$/.test(s) ? s : null;
 }
 
 // ---------- usernames ----------

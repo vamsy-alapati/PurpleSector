@@ -77,14 +77,20 @@ export function LeaderboardPanel({
             return (
               <div
                 key={e.playerId}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2 ${mine ? 'bg-fuchsia-500/20 ring-1 ring-fuchsia-400/50' : 'odd:bg-white/[0.03]'}`}
+                // Your row is sticky: locked to the bottom while it's further down the list,
+                // scrolls with the list when visible, locked to the top once scrolled past.
+                className={`flex items-center gap-3 rounded-lg px-3 py-2 ${
+                  mine
+                    ? 'sticky bottom-0 top-0 z-10 bg-[#2b1236] shadow-[0_0_14px_rgba(0,0,0,0.7)] ring-1 ring-fuchsia-400/60'
+                    : 'odd:bg-white/[0.03]'
+                }`}
               >
                 <div className={`tabular w-8 text-right font-mono text-sm font-bold ${e.rank <= 3 ? 'text-fuchsia-300' : 'text-white/60'}`}>
                   {e.rank}
                 </div>
                 <div className="min-w-0 flex-1 truncate font-semibold">
                   {e.name}
-                  {mine && <span className="ml-1 text-xs text-fuchsia-300">(you)</span>}
+                  {mine && <span className="ml-1 text-xs font-bold text-fuchsia-300">(You)</span>}
                 </div>
                 <div className="text-right">
                   <div className="tabular font-mono text-sm font-bold">{formatTime(e.time)}</div>
@@ -114,10 +120,27 @@ export function LeaderboardPanel({
           })}
         </div>
 
-        {board?.me && !meInTop && (
-          <div className="border-t border-white/10 px-5 py-3 text-sm">
-            You: <span className="font-bold">#{board.me.rank}</span> ·{' '}
-            <span className="tabular font-mono">{formatTime(board.me.time)}</span>
+        {/* Outside the loaded top 100: your row is always locked at the bottom */}
+        {board?.me && !meInTop && player && (
+          <div className="px-2 pb-2">
+            <div className="flex items-center gap-3 rounded-lg bg-[#2b1236] px-3 py-2 ring-1 ring-fuchsia-400/60">
+              <div className="tabular w-8 text-right font-mono text-sm font-bold text-white/60">{board.me.rank}</div>
+              <div className="min-w-0 flex-1 truncate font-semibold">
+                {player.name}
+                <span className="ml-1 text-xs font-bold text-fuchsia-300">(You)</span>
+              </div>
+              <div className="text-right">
+                <div className="tabular font-mono text-sm font-bold">{formatTime(board.me.time)}</div>
+                {leader !== null && (
+                  <div className="tabular font-mono text-[10px] text-white/40">+{(board.me.time - leader).toFixed(3)}</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+        {board && player && !board.me && board.entries.length > 0 && (
+          <div className="border-t border-white/10 px-5 py-3 text-xs text-white/50">
+            No lap yet today — set a time to get ranked.
           </div>
         )}
         {!player && (
