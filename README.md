@@ -26,7 +26,7 @@ Add `?seed=anything` to the URL to practise on a different track. Practice laps 
 
 ## Controls
 
-↑/W throttle · ↓/S brake/reverse · ←→/AD steer · **R** instant restart · **C** full-track/chase camera · **G** ghost · **M** sound · **L** leaderboard · **Esc** pause
+↑/W throttle · ↓/S/Space brake/reverse · ←→/AD steer · **R** instant restart · **C** full-track/chase camera · **G** ghost · **M** sound · **L** leaderboard · **Esc** pause
 
 ## Project layout
 

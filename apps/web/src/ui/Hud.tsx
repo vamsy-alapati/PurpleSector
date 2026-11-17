@@ -127,7 +127,7 @@ export function Hud({ hud, touch, ...a }: { hud: HudState; touch: boolean } & Hu
             </ToggleButton>
           </div>
           <div className="hidden text-[11px] leading-relaxed text-white/40 md:block">
-            ↑ W throttle · ↓ S brake · ← → A D steer · R restart · Esc pause
+            ↑ W throttle · ↓ S Space brake · ← → A D steer · R restart · Esc pause
           </div>
         </div>
       )}

@@ -119,7 +119,7 @@ export function StartMenu({
       ) : (
       <div className="mt-6 grid grid-cols-2 gap-x-6 gap-y-1 text-left text-sm text-white/70">
         <Key k="↑ / W">Throttle</Key>
-        <Key k="↓ / S">Brake / reverse</Key>
+        <Key k="↓ / S / Space">Brake / reverse</Key>
         <Key k="← → / A D">Steer</Key>
         <Key k="R">Instant restart</Key>
         <Key k="C">Full track / chase cam</Key>

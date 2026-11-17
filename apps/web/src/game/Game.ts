@@ -579,7 +579,8 @@ export class Game {
     if (code === 'Enter' || code === 'Space') {
       if (this.phase === 'ready') this.start();
       else if (this.phase === 'paused') this.togglePause();
-      else if (this.phase === 'finished') this.restart();
+      // Space is also the brake, so only Enter retries from the results (no accidental skip)
+      else if (this.phase === 'finished' && code === 'Enter') this.restart();
     } else if (code === 'KeyR') {
       if (this.phase !== 'ready') this.restart();
     } else if (code === 'Escape' || code === 'KeyP') {

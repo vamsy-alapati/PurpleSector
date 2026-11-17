@@ -1,7 +1,7 @@
 import { INPUT } from '@purple-sector/sim';
 
 const THROTTLE = ['ArrowUp', 'KeyW'];
-const BRAKE = ['ArrowDown', 'KeyS'];
+const BRAKE = ['ArrowDown', 'KeyS', 'Space'];
 const LEFT = ['ArrowLeft', 'KeyA'];
 const RIGHT = ['ArrowRight', 'KeyD'];
 const BLOCK_DEFAULT = new Set([...THROTTLE, ...BRAKE, ...LEFT, ...RIGHT, 'Space']);
