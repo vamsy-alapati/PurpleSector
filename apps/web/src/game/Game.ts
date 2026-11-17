@@ -272,6 +272,22 @@ export class Game {
     this.emitHud();
   }
 
+  /** Abandon the current attempt and go back to the start screen. */
+  toMenu(): void {
+    this.session.resetCar();
+    this.attemptInputs = [];
+    Object.assign(this.prev, this.session.car);
+    this.recorder.reset();
+    this.fx.clear();
+    this.sectorStatus = [];
+    this.sectorTimes = [];
+    this.flash = null;
+    this.goTimer = 0;
+    this.snapChase();
+    this.phase = 'ready';
+    this.emitHud();
+  }
+
   togglePause(): void {
     if (this.phase === 'running' || this.phase === 'countdown') {
       this.pausedFrom = this.phase;

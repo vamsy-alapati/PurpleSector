@@ -133,10 +133,28 @@ export function StartMenu({
   );
 }
 
-export function PauseMenu({ onResume, onRestart }: { onResume: () => void; onRestart: () => void }) {
+export function PauseMenu({
+  playerName,
+  onResume,
+  onRestart,
+  onMainMenu,
+  onOtherDevice,
+}: {
+  playerName: string | null;
+  onResume: () => void;
+  onRestart: () => void;
+  onMainMenu: () => void;
+  /** Show the recovery code (only when signed in). */
+  onOtherDevice: (() => void) | null;
+}) {
   return (
     <Overlay>
       <h2 className="text-3xl font-black">PAUSED</h2>
+      {playerName && (
+        <p className="mt-1 text-xs text-white/40">
+          Driving as <span className="font-bold text-white/70">{playerName}</span>
+        </p>
+      )}
       <div className="mt-6 flex flex-col gap-3">
         <button
           onClick={onResume}
@@ -150,7 +168,18 @@ export function PauseMenu({ onResume, onRestart }: { onResume: () => void; onRes
         >
           RESTART
         </button>
+        <button
+          onClick={onMainMenu}
+          className="rounded-xl bg-white/10 px-6 py-3 font-bold transition hover:bg-white/20"
+        >
+          MAIN MENU
+        </button>
       </div>
+      {onOtherDevice && (
+        <button onClick={onOtherDevice} className="mt-4 text-xs text-fuchsia-300/80 underline hover:text-fuchsia-200">
+          Use this name on another device
+        </button>
+      )}
     </Overlay>
   );
 }

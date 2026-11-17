@@ -229,7 +229,13 @@ export default function App() {
         />
       )}
       {hud.phase === 'paused' && !overlayOpen && (
-        <PauseMenu onResume={() => gameRef.current?.togglePause()} onRestart={() => gameRef.current?.restart()} />
+        <PauseMenu
+          playerName={player?.name ?? null}
+          onResume={() => gameRef.current?.togglePause()}
+          onRestart={() => gameRef.current?.restart()}
+          onMainMenu={() => gameRef.current?.toMenu()}
+          onOtherDevice={player ? () => setShowRecovery(true) : null}
+        />
       )}
       {hud.phase === 'finished' && hud.result && !overlayOpen && (
         <ResultsPopup
@@ -240,6 +246,7 @@ export default function App() {
           onRetry={() => gameRef.current?.restart()}
           onLeaderboard={openBoard}
           onSaveLap={!player && !practice ? () => setNamePopup('save-lap') : null}
+          onMainMenu={() => gameRef.current?.toMenu()}
         />
       )}
       {showBoard && (

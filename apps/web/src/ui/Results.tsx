@@ -26,6 +26,7 @@ export function ResultsPopup({
   onRetry,
   onLeaderboard,
   onSaveLap,
+  onMainMenu,
 }: {
   result: AttemptResult;
   trackName: string;
@@ -35,6 +36,7 @@ export function ResultsPopup({
   onLeaderboard: () => void;
   /** Lap was driven without a name: offer to pick one and submit it. */
   onSaveLap: (() => void) | null;
+  onMainMenu: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   const [showTargets, setShowTargets] = useState(false);
@@ -150,6 +152,9 @@ export function ResultsPopup({
           className="mt-2 w-full rounded-xl bg-white/10 px-4 py-2.5 font-bold transition hover:bg-white/20"
         >
           🏆 Leaderboard <span className="ml-1 font-mono text-xs text-fuchsia-300">L</span>
+        </button>
+        <button onClick={onMainMenu} className="mt-3 text-xs text-white/50 underline hover:text-white/80">
+          Main menu
         </button>
 
         {result.valid && showTargets && (
